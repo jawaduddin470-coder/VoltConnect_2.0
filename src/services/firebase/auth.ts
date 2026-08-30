@@ -9,8 +9,6 @@ import {
   browserLocalPersistence,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
 } from 'firebase/auth';
 import { firebaseAuth } from './config';
 
@@ -26,12 +24,13 @@ export function getAuthErrorMessage(error: any): string {
   const code = error?.code || '';
   const message = error?.message || '';
 
-  if (message.includes('Illegal url for new iframe') || code === 'auth/unauthorized-domain') {
-    return 'Domain authorization is propagating in Firebase Console. You can also sign in directly using Email & Password below.';
-  }
-
-  if (message.includes('missing initial state') || message.includes('storage-partitioned')) {
-    return 'Google Sign-In was blocked by browser storage partitioning. Please allow cookies for this site or use Email & Password authentication.';
+  if (
+    message.includes('Illegal url for new iframe') ||
+    message.includes('storage-partitioned') ||
+    message.includes('missing initial state') ||
+    code === 'auth/unauthorized-domain'
+  ) {
+    return 'Google Sign-In was restricted by browser cross-site tracking settings. Please use Email & Password authentication below or allow 3rd-party cookies for this site.';
   }
 
   switch (code) {
@@ -52,7 +51,7 @@ export function getAuthErrorMessage(error: any): string {
     case 'auth/popup-closed-by-user':
       return 'Google sign-in was cancelled before completion.';
     case 'auth/popup-blocked':
-      return 'Google sign-in popup was blocked by your browser settings. Redirecting to Google Sign-In...';
+      return 'Google sign-in popup was blocked by your browser settings. Please allow popups for this site.';
     case 'auth/too-many-requests':
       return 'Access to this account has been temporarily disabled due to many failed login attempts. You can reset your password or try again later.';
     case 'auth/network-request-failed':
@@ -74,7 +73,6 @@ export async function loginWithFirebase(email: string, pass: string): Promise<Fi
 
 /**
  * Authenticates user with Firebase Auth via Google Sign-In Provider.
- * Safely falls back to signInWithRedirect when browser iframe storage partitioning occurs.
  */
 export async function loginWithGoogle(): Promise<FirebaseUser> {
   const provider = new GoogleAuthProvider();
@@ -84,39 +82,9 @@ export async function loginWithGoogle(): Promise<FirebaseUser> {
     const cred = await signInWithPopup(firebaseAuth, provider);
     return cred.user;
   } catch (err: any) {
-    console.warn('[FirebaseAuth] Popup login error caught, initiating redirect fallback:', err);
-    const msg = err?.message || '';
-    const code = err?.code || '';
-
-    // If popup is blocked, iframe origin error occurs, or storage partitioning blocks popup:
-    if (
-      msg.includes('Illegal url for new iframe') ||
-      msg.includes('storage-partitioned') ||
-      msg.includes('missing initial state') ||
-      code === 'auth/popup-blocked' ||
-      code === 'auth/unauthorized-domain'
-    ) {
-      console.log('[FirebaseAuth] Triggering signInWithRedirect fallback');
-      await signInWithRedirect(firebaseAuth, provider);
-      // Returns a promise that resolves when redirect starts
-      return new Promise(() => {}); // Wait for browser redirect
-    }
-
+    console.warn('[FirebaseAuth] Google login error:', err);
     const friendlyMsg = getAuthErrorMessage(err);
     throw new Error(friendlyMsg);
-  }
-}
-
-/**
- * Checks for incoming redirect auth results on app load.
- */
-export async function checkRedirectAuthResult(): Promise<FirebaseUser | null> {
-  try {
-    const res = await getRedirectResult(firebaseAuth);
-    return res?.user || null;
-  } catch (err) {
-    console.warn('[FirebaseAuth] Error fetching redirect result:', err);
-    return null;
   }
 }
 
