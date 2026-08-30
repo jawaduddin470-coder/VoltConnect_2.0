@@ -1,0 +1,138 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // VOLTCONNECT 2.0 — AUTHORIZATION HELPER FUNCTIONS
+    // =========================================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Role Checks (using Custom Claims or User Profile Document Role)
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.role == 'super_admin') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'super_admin')
+      );
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.role == 'admin' || request.auth.token.role == 'super_admin') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (getUserData().role == 'admin' || getUserData().role == 'super_admin'))
+      );
+    }
+
+    function isPartner() {
+      return isAuthenticated() && (
+        (request.auth.token.role == 'partner') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'partner') ||
+        isAdmin()
+      );
+    }
+
+    function isTechnician() {
+      return isAuthenticated() && (
+        (request.auth.token.role == 'technician') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'technician') ||
+        isAdmin()
+      );
+    }
+
+    // =========================================================================
+    // 1. IMMUTABLE SYSTEM AUDIT LOGS (append-only)
+    // =========================================================================
+    match /admin_audit_logs/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false; // Strict append-only policy: no edit/delete
+    }
+
+    // =========================================================================
+    // 2. CHARGING STATIONS (Public Read for VoltMap; Admin/Partner Write)
+    // =========================================================================
+    match /stations/{stationId} {
+      allow read: if true; // Preserves VoltMap station discovery without data loss
+      allow write: if isAdmin() || isPartner(); // Restricted to Admin/Partner roles
+    }
+
+    // =========================================================================
+    // 3. VEHICLE CATALOG (Public Read for Onboarding; Admin Write)
+    // =========================================================================
+    match /vehicle_catalog/{categoryId} {
+      allow read: if true; // Dynamic consumption for driver onboarding
+      allow write: if isAdmin(); // Only Admins can modify catalog entries
+    }
+
+    // =========================================================================
+    // 4. USER MANAGEMENT (Driver isolated to own profile; Admin manages all)
+    // =========================================================================
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+
+      match /vehicles/{vehicleId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+
+      match /user_vehicles/{vehicleId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // =========================================================================
+    // 5. PARTNERS & CPOS (Authenticated Read; Admin Write)
+    // =========================================================================
+    match /voltconnect_partners/{partnerId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // 6. SERVICE REQUESTS (Role & Resource Scoped)
+    // =========================================================================
+    match /service_requests/{requestId} {
+      allow read: if isAuthenticated() && (
+        resource == null ||
+        resource.data.userId == request.auth.uid ||
+        resource.data.assignedTechnicianId == request.auth.uid ||
+        resource.data.assignedPartnerId == request.auth.uid ||
+        isTechnician() ||
+        isPartner() ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.assignedTechnicianId == request.auth.uid ||
+        isTechnician() ||
+        isPartner() ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // 7. STATION REPORTS (Authenticated Create/Read; Admin Manage)
+    // =========================================================================
+    match /station_reports/{reportId} {
+      allow read, create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // DEFAULT FALLBACK POLICY (Deny-all unhandled paths)
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

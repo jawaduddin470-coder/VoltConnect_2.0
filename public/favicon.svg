@@ -1,0 +1,14 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="32" cy="32" r="24" stroke="url(#fav_circ)" stroke-width="2.5" fill="none"/>
+  <path d="M37 12L22 34H33L27 52L44 26H31L37 12Z" fill="url(#fav_bolt)"/>
+  <defs>
+    <linearGradient id="fav_circ" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00E5BE"/>
+      <stop offset="1" stop-color="#00A3FF"/>
+    </linearGradient>
+    <linearGradient id="fav_bolt" x1="22" y1="12" x2="44" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00E5BE"/>
+      <stop offset="1" stop-color="#00A3FF"/>
+    </linearGradient>
+  </defs>
+</svg>
