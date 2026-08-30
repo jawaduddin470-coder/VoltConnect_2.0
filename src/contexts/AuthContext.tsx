@@ -59,6 +59,39 @@ const DEFAULT_VEHICLE: UserVehicle = {
   createdAt: new Date().toISOString(),
 };
 
+/**
+ * Evaluates whether a user's profile and vehicle setup are 100% complete.
+ * Authoritative Single Source of Truth for Onboarding & Profile Status.
+ */
+export function isProfileComplete(
+  profile: UserProfile | null,
+  activeVehicle: UserVehicle | null
+): boolean {
+  if (!profile) return false;
+
+  // Non-driver roles (partner, technician, admin) bypass driver vehicle onboarding
+  if (profile.role && profile.role !== 'driver') return true;
+
+  // 1. Explicit onboarding completion flag check
+  if (profile.onboardingComplete !== true) return false;
+
+  // 2. Name check
+  if (!profile.name || profile.name.trim().length === 0) return false;
+
+  // 3. Vehicle Brand & Model check (either on profile or activeVehicle)
+  const brand = profile.vehicleBrand || activeVehicle?.manufacturer || '';
+  const model = profile.vehicleModel || activeVehicle?.model || '';
+
+  if (!brand || brand.trim().length === 0) return false;
+  if (!model || model.trim().length === 0) return false;
+
+  // 4. Current Battery Charge (SOC) check
+  const soc = activeVehicle?.currentBatteryPercent;
+  if (typeof soc !== 'number' || isNaN(soc) || soc < 0 || soc > 100) return false;
+
+  return true;
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(() => {
     const saved = localStorage.getItem('vc_user');
@@ -104,18 +137,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             await saveUserProfile(profile);
           }
-          setUser(profile);
 
           const dbVehicles = await fetchUserVehicles(fbUser.uid);
           if (dbVehicles.length > 0) {
             setVehicles(dbVehicles);
           }
+
+          setUser(profile);
         } catch (err) {
           console.warn('[AuthContext] Error fetching authenticated user profile:', err);
         }
       } else {
         setUser(null);
         localStorage.removeItem('vc_user');
+        localStorage.removeItem('vc_vehicles');
       }
       setLoading(false);
     });
@@ -152,8 +187,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           name: email.split('@')[0].toUpperCase(),
           email,
           role,
-          onboardingComplete: true,
-          profileComplete: true,
+          onboardingComplete: false,
+          profileComplete: false,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           lastLoginAt: new Date().toISOString(),
@@ -254,6 +289,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setUser(null);
       localStorage.removeItem('vc_user');
+      localStorage.removeItem('vc_vehicles');
     }
   };
 
@@ -281,7 +317,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
     };
 
-    const updated = vehicles.map(v => ({ ...v, isDefault: false }));
+    const updated = vehicles.filter(v => v.id !== 'veh-nexon-ev-45').map(v => ({ ...v, isDefault: false }));
     updated.push({ ...newVehicle, isDefault: true });
 
     setVehicles(updated);
@@ -348,13 +384,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const profileComplete = isProfileComplete(user, activeVehicle);
+
   return (
     <AuthContext.Provider
       value={{
         user,
         role: user?.role || 'driver',
         loading,
-        onboardingComplete: user?.onboardingComplete ?? false,
+        onboardingComplete: profileComplete,
         activeVehicle,
         vehicles,
         login,

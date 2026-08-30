@@ -39,15 +39,16 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
   allowedRoles,
 }) => {
   const { user, role, loading, onboardingComplete } = useAuth();
+  const location = useLocation();
 
   // Handle Authentication Loading & Session Restoration State
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-sans">
         <div className="space-y-4 text-center">
           <div className="w-12 h-12 rounded-full border-4 border-sky-500 border-t-transparent animate-spin mx-auto" />
-          <div className="font-heading font-extrabold text-lg text-white">Restoring VoltConnect Session...</div>
-          <p className="text-xs text-slate-400">Verifying secure authentication and vehicle context</p>
+          <div className="font-heading font-extrabold text-lg text-white">VOLTCONNECT 2.0</div>
+          <p className="text-xs text-slate-400 font-mono">Checking user profile & vehicle state...</p>
         </div>
       </div>
     );
@@ -62,8 +63,14 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
     );
   }
 
-  if (role === 'driver' && !onboardingComplete && window.location.pathname !== '/onboarding') {
+  // Handle Incomplete Driver Profile -> Force Onboarding
+  if (role === 'driver' && !onboardingComplete && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
+  }
+
+  // Handle Complete Driver Profile visiting /onboarding -> Redirect to Dashboard
+  if (role === 'driver' && onboardingComplete && location.pathname === '/onboarding') {
+    return <Navigate to="/dashboard" replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(role)) {
@@ -128,7 +135,16 @@ export const App: React.FC = () => {
           <Route path="/login/partner" element={<PartnerLogin />} />
           <Route path="/login/technician" element={<TechnicianLogin />} />
           <Route path="/signup" element={<Signup />} />
-          <Route path="/onboarding" element={<Onboarding />} />
+
+          {/* Onboarding Guarded Route */}
+          <Route
+            path="/onboarding"
+            element={
+              <ProtectedRoute allowedRoles={['driver']}>
+                <Onboarding />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Driver Protected Routes */}
           <Route
@@ -212,16 +228,6 @@ export const App: React.FC = () => {
             }
           />
           <Route
-            path="/insight"
-            element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <VoltInsightPage />
-                </AppLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/homecharge"
             element={
               <ProtectedRoute allowedRoles={['driver']}>
@@ -242,7 +248,7 @@ export const App: React.FC = () => {
             }
           />
           <Route
-            path="/ai"
+            path="/volt-ai"
             element={
               <ProtectedRoute allowedRoles={['driver']}>
                 <AppLayout>
@@ -252,11 +258,11 @@ export const App: React.FC = () => {
             }
           />
           <Route
-            path="/voltai"
+            path="/insight"
             element={
               <ProtectedRoute allowedRoles={['driver']}>
                 <AppLayout>
-                  <VoltAIPage />
+                  <VoltInsightPage />
                 </AppLayout>
               </ProtectedRoute>
             }
@@ -272,59 +278,27 @@ export const App: React.FC = () => {
             }
           />
 
-          {/* Partner Portal */}
+          {/* Partner Portal Protected Routes */}
           <Route
             path="/partner/dashboard"
             element={
-              <ProtectedRoute allowedRoles={['partner']}>
-                <AppLayout>
-                  <PartnerDashboard />
-                </AppLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/partner/*"
-            element={
-              <ProtectedRoute allowedRoles={['partner']}>
-                <AppLayout>
-                  <PartnerDashboard />
-                </AppLayout>
+              <ProtectedRoute allowedRoles={['partner', 'admin', 'super_admin']}>
+                <PartnerDashboard />
               </ProtectedRoute>
             }
           />
 
-          {/* Technician Portal */}
+          {/* Technician Portal Protected Routes */}
           <Route
             path="/technician/dashboard"
             element={
-              <ProtectedRoute allowedRoles={['technician']}>
-                <AppLayout>
-                  <TechnicianDashboard />
-                </AppLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/technician/*"
-            element={
-              <ProtectedRoute allowedRoles={['technician']}>
-                <AppLayout>
-                  <TechnicianDashboard />
-                </AppLayout>
+              <ProtectedRoute allowedRoles={['technician', 'admin', 'super_admin']}>
+                <TechnicianDashboard />
               </ProtectedRoute>
             }
           />
 
-          {/* Admin Command Center */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
+          {/* Admin Console Protected Routes */}
           <Route
             path="/admin/dashboard"
             element={
@@ -333,16 +307,8 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/admin/*"
-            element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
 
-          {/* Fallback Catch-All */}
+          {/* Wildcard Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>

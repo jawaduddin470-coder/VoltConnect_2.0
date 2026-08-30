@@ -31,13 +31,18 @@ import {
 } from 'lucide-react';
 
 export const Onboarding: React.FC = () => {
-  const { user, updateProfile, addVehicle } = useAuth();
+  const { user, activeVehicle, updateProfile, addVehicle } = useAuth();
   const navigate = useNavigate();
 
   // Onboarding Step State (Persisted in session to prevent accidental resets)
   const [step, setStep] = useState<number>(() => {
     const saved = sessionStorage.getItem('vc_onboarding_step');
-    return saved ? parseInt(saved, 10) : 1;
+    if (saved) return parseInt(saved, 10);
+    // Intelligent step determination for partial profiles:
+    if (user?.name && (!user?.vehicleBrand || !user?.vehicleModel)) {
+      return 2; // Jump to brand selection if name is already pre-filled
+    }
+    return 1;
   });
 
   const [userName, setUserName] = useState<string>(() => {
@@ -55,7 +60,9 @@ export const Onboarding: React.FC = () => {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [selectedManufacturer, setSelectedManufacturer] = useState<CatalogManufacturer | null>(null);
   const [selectedModel, setSelectedModel] = useState<CatalogModel | null>(null);
-  const [startingSOC, setStartingSOC] = useState<number>(85);
+  const [startingSOC, setStartingSOC] = useState<number>(() => {
+    return activeVehicle?.currentBatteryPercent ?? 85;
+  });
 
   // Save Progress Error State
   const [saving, setSaving] = useState(false);
@@ -141,7 +148,7 @@ export const Onboarding: React.FC = () => {
         dataSource: 'VERIFIED',
       });
 
-      // 2. Update Firestore User Profile (Merge semantics)
+      // 2. Update Firestore User Profile with explicit onboarding completion
       updateProfile({
         name: finalName,
         onboardingComplete: true,
@@ -169,273 +176,251 @@ export const Onboarding: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 ev-pattern-bg flex flex-col justify-between py-8 px-4">
       
-      {/* Top Header & Smooth Animated Step Progress Bar */}
-      <div className="max-w-xl mx-auto w-full flex items-center justify-between">
+      {/* Header Bar */}
+      <div className="max-w-4xl mx-auto w-full flex items-center justify-between">
         <LogoFull height={38} />
-        <div className="flex items-center gap-3">
-          <div className="w-28 bg-slate-200 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-300/50">
-            <div
-              className="h-full bg-gradient-to-r from-sky-500 to-teal-400 rounded-full transition-all duration-500 ease-out shadow-xs"
-              style={{ width: `${(step / 5) * 100}%` }}
-            />
-          </div>
-          <span className="text-xs font-extrabold text-navy-900">Step {step} of 5</span>
+        <div className="flex items-center gap-2">
+          <span className="vc-badge vc-badge-sky text-xs font-mono font-bold">STEP {step} OF 5</span>
         </div>
       </div>
 
-      {/* Main Step Container */}
-      <div className="max-w-xl mx-auto w-full my-auto">
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-8 sm:p-10 transition-all">
+      {/* Main Container */}
+      <div className="max-w-2xl mx-auto w-full my-auto py-8">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-6 sm:p-10 space-y-8">
           
-          {/* STEP 1: Welcome & Preferred Driver Name */}
+          {/* STEP 1: USER NAME & WELCOME */}
           {step === 1 && (
-            <div key="step-1" className="space-y-6 vc-trans-slide-h">
+            <div className="space-y-6 text-center animate-in fade-in">
               <div className="space-y-2">
-                <span className="vc-badge vc-badge-teal">WELCOME TO VOLTCONNECT</span>
-                <h2 className="font-heading text-2xl sm:text-3xl font-extrabold text-navy-900 leading-tight">
-                  Welcome! Let's build your personalized EV workspace.
-                </h2>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  Tell us what to call you so VoltConnect can tailor charger filtering, battery health tracking, and journey estimation specifically for your vehicle.
+                <div className="w-16 h-16 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center mx-auto shadow-inner">
+                  <Sparkles className="w-8 h-8" />
+                </div>
+                <h1 className="font-heading text-2xl sm:text-3xl font-extrabold text-navy-900 tracking-tight">
+                  Welcome to VoltConnect 2.0
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
+                  Let's personalize your EV mobility experience. How should we address you across your journey?
                 </p>
               </div>
 
-              <div className="space-y-1.5 pt-2">
-                <label className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
-                  Preferred Driver Name
+              <div className="space-y-2 text-left max-w-md mx-auto">
+                <label className="text-xs font-extrabold uppercase text-slate-700 font-mono tracking-wider">
+                  Your Full Name
                 </label>
                 <input
                   type="text"
                   value={userName}
                   onChange={e => setUserName(e.target.value)}
-                  placeholder="Enter your name (e.g. Mohammed)"
-                  className="w-full px-4 py-3.5 rounded-xl border border-slate-300 font-semibold text-slate-900 text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none shadow-xs"
-                  required
+                  placeholder="e.g. Meraj Uddin"
+                  className="w-full px-4 py-3.5 rounded-2xl border border-slate-300 focus:border-sky-500 focus:ring-2 focus:ring-sky-200 outline-none text-sm font-semibold transition-all"
+                  autoFocus
                 />
               </div>
 
-              <button
-                onClick={() => setStep(2)}
-                disabled={!userName.trim()}
-                className="w-full vc-btn vc-btn-teal py-3.5 font-extrabold text-xs flex items-center justify-center gap-2 shadow-md hover:scale-[1.01] transition-all disabled:opacity-50"
-              >
-                <span>CONTINUE TO EV CATEGORY</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              <div className="flex justify-end pt-4">
+                <button
+                  onClick={() => setStep(2)}
+                  disabled={!userName.trim()}
+                  className="vc-btn vc-btn-sky py-3.5 px-8 text-xs font-extrabold shadow-md hover:scale-[1.02] transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  NEXT: VEHICLE CATEGORY <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
 
-          {/* STEP 2: EV Category Cards */}
+          {/* STEP 2: CATEGORY SELECTION */}
           {step === 2 && (
-            <div key="step-2" className="space-y-6 vc-trans-slide-h">
-              <div className="space-y-2">
-                <span className="vc-badge vc-badge-teal">Form Factor</span>
-                <h2 className="font-heading text-2xl font-extrabold text-navy-900">
-                  Select your EV Category
+            <div className="space-y-6 text-center animate-in fade-in">
+              <div className="space-y-1">
+                <span className="vc-badge vc-badge-sky text-[10px]">STEP 2 OF 5 • VEHICLE CATEGORY</span>
+                <h2 className="font-heading text-xl sm:text-2xl font-extrabold text-navy-900">
+                  Select Your EV Category
                 </h2>
                 <p className="text-xs text-slate-500">
-                  VoltConnect supports multi-EV form factors across all mobility sectors.
+                  Choose your primary electric vehicle platform for route optimization and charger matching.
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                {EV_CATEGORIES.map(cat => (
-                  <button
-                    key={cat.id}
-                    onClick={() => {
-                      setSelectedCategory(cat.id);
-                      setSelectedManufacturer(null);
-                      setSelectedModel(null);
-                    }}
-                    className={`p-4 rounded-2xl border text-left space-y-2 transition-all ${
-                      selectedCategory === cat.id
-                        ? 'border-sky-500 bg-sky-50/70 ring-2 ring-sky-500/20 shadow-sm'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      {getCategoryIcon(cat.id)}
-                      {selectedCategory === cat.id && <CheckCircle2 className="w-4 h-4 text-sky-600 shrink-0" />}
-                    </div>
-                    <div>
-                      <div className="font-heading font-extrabold text-xs text-navy-900">{cat.name}</div>
-                      <div className="text-[10px] text-slate-500 leading-tight mt-0.5">{cat.description}</div>
-                    </div>
-                  </button>
-                ))}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {EV_CATEGORIES.map(cat => {
+                  const isSelected = selectedCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCategory(cat.id as EVCategory)}
+                      className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between space-y-3 cursor-pointer ${
+                        isSelected
+                          ? 'border-sky-500 bg-sky-50/50 ring-2 ring-sky-400/20 shadow-md scale-[1.02]'
+                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        {getCategoryIcon(cat.id as EVCategory)}
+                        {isSelected && <CheckCircle2 className="w-5 h-5 text-sky-500" />}
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900">{cat.name}</div>
+                        <div className="text-[10px] text-slate-500 line-clamp-1">{cat.description}</div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
 
-              <div className="flex justify-between pt-2">
+              <div className="flex justify-between pt-4">
                 <button onClick={() => setStep(1)} className="vc-btn vc-btn-ghost text-xs">
                   <ArrowLeft className="w-4 h-4" /> Back
                 </button>
                 <button
                   onClick={() => setStep(3)}
-                  className="vc-btn vc-btn-teal py-3 px-6 text-xs font-bold"
+                  className="vc-btn vc-btn-sky py-3.5 px-8 text-xs font-extrabold shadow-md hover:scale-[1.02] transition-all flex items-center gap-2"
                 >
-                  Select Manufacturer <ArrowRight className="w-4 h-4" />
+                  NEXT: MANUFACTURER <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP 3: Database-Driven Manufacturers */}
+          {/* STEP 3: MANUFACTURER SELECTION */}
           {step === 3 && (
-            <div key="step-3" className="space-y-6 vc-trans-slide-h">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="vc-badge vc-badge-teal">FIRESTORE CATALOG</span>
-                  <span className="text-[10px] font-bold text-slate-400">DATABASE-DRIVEN</span>
-                </div>
-                <h2 className="font-heading text-2xl font-extrabold text-navy-900">
-                  Select EV Manufacturer
+            <div className="space-y-6 text-center animate-in fade-in">
+              <div className="space-y-1">
+                <span className="vc-badge vc-badge-sky text-[10px]">STEP 3 OF 5 • MANUFACTURER BRAND</span>
+                <h2 className="font-heading text-xl sm:text-2xl font-extrabold text-navy-900">
+                  Choose Your EV Brand
                 </h2>
+                <p className="text-xs text-slate-500">
+                  Select your vehicle manufacturer from our verified Indian & global EV database.
+                </p>
               </div>
 
-              {/* Search & Popular Filter Controls */}
-              <div className="space-y-3">
-                <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                  <input
-                    type="text"
-                    value={brandSearch}
-                    onChange={e => setBrandSearch(e.target.value)}
-                    placeholder="Search manufacturer or country..."
-                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium text-navy-900 bg-slate-50 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setPopularFilter(!popularFilter)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border ${
-                      popularFilter
-                        ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
-                        : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                    }`}
-                  >
-                    <Star className={`w-3.5 h-3.5 ${popularFilter ? 'fill-current' : ''}`} />
-                    <span>Popular Brands</span>
-                  </button>
-                  <span className="text-[11px] font-semibold text-slate-400 ml-auto">
-                    {manufacturers.length} Brands Available
-                  </span>
-                </div>
+              {/* Brand Search Bar */}
+              <div className="relative max-w-md mx-auto">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                <input
+                  type="text"
+                  value={brandSearch}
+                  onChange={e => setBrandSearch(e.target.value)}
+                  placeholder="Search brand (e.g. Tata, Mahindra, MG, BMW, Hyundai)..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-xs font-medium focus:border-sky-500 outline-none"
+                />
               </div>
 
-              {/* Catalog Cards */}
+              {/* Manufacturers Grid */}
               {catalogLoading ? (
-                <div className="grid grid-cols-2 gap-2.5 max-h-56 overflow-y-auto">
-                  <div className="h-14 vc-skeleton rounded-xl" />
-                  <div className="h-14 vc-skeleton rounded-xl" />
-                  <div className="h-14 vc-skeleton rounded-xl" />
-                  <div className="h-14 vc-skeleton rounded-xl" />
+                <div className="py-12 flex flex-col items-center justify-center space-y-2 text-slate-400">
+                  <RefreshCw className="w-6 h-6 animate-spin text-sky-500" />
+                  <span className="text-xs font-mono">Loading EV Manufacturers...</span>
                 </div>
               ) : manufacturers.length === 0 ? (
-                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
-                  <SlidersHorizontal className="w-8 h-8 text-slate-400 mx-auto" />
-                  <div className="font-heading font-extrabold text-xs text-slate-700">No Manufacturers Found</div>
-                  <p className="text-[11px] text-slate-500">Try broadening your search or disabling filters.</p>
+                <div className="py-8 text-center text-xs text-slate-500">
+                  No EV brands found matching "{brandSearch}".
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
-                  {manufacturers.map(mfg => (
-                    <button
-                      key={mfg.id}
-                      onClick={() => {
-                        setSelectedManufacturer(mfg);
-                        setSelectedModel(null);
-                      }}
-                      className={`p-3.5 rounded-xl border text-left transition-all space-y-1 ${
-                        selectedManufacturer?.id === mfg.id
-                          ? 'border-teal-500 bg-teal-50 text-teal-900 shadow-xs ring-2 ring-teal-500/20'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-heading font-extrabold text-xs text-navy-900">{mfg.name}</span>
-                        {mfg.popular && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />}
-                      </div>
-                      <div className="flex items-center gap-1 text-[10px] text-slate-500">
-                        <Globe className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span>{mfg.country}</span>
-                        <span className="ml-auto font-bold text-teal-600">{mfg.models.length} Models</span>
-                      </div>
-                    </button>
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-64 overflow-y-auto pr-1">
+                  {manufacturers.map(m => {
+                    const isSelected = selectedManufacturer?.id === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => setSelectedManufacturer(m)}
+                        className={`p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                          isSelected
+                            ? 'border-sky-500 bg-sky-50/50 ring-2 ring-sky-400/20 shadow-md scale-[1.02]'
+                            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/80'
+                        }`}
+                      >
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-extrabold text-slate-900">{m.name}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">{m.country}</div>
+                        </div>
+                        {isSelected && <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0" />}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
-              <div className="flex justify-between pt-2">
+              <div className="flex justify-between pt-4">
                 <button onClick={() => setStep(2)} className="vc-btn vc-btn-ghost text-xs">
                   <ArrowLeft className="w-4 h-4" /> Back
                 </button>
                 <button
                   onClick={() => setStep(4)}
                   disabled={!selectedManufacturer}
-                  className="vc-btn vc-btn-teal py-3 px-6 text-xs font-bold disabled:opacity-50"
+                  className="vc-btn vc-btn-sky py-3.5 px-8 text-xs font-extrabold shadow-md hover:scale-[1.02] transition-all disabled:opacity-50 flex items-center gap-2"
                 >
-                  Select Model <ArrowRight className="w-4 h-4" />
+                  NEXT: VEHICLE MODEL <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP 4: Dynamic Model & Variant */}
+          {/* STEP 4: MODEL SELECTION */}
           {step === 4 && selectedManufacturer && (
-            <div key="step-4" className="space-y-6 vc-trans-slide-h">
-              <div className="space-y-2">
-                <span className="vc-badge vc-badge-teal">Model & Specifications</span>
-                <h2 className="font-heading text-2xl font-extrabold text-navy-900">
-                  Select {selectedManufacturer.name} Model & Variant
+            <div className="space-y-6 text-center animate-in fade-in">
+              <div className="space-y-1">
+                <span className="vc-badge vc-badge-sky text-[10px]">STEP 4 OF 5 • VEHICLE MODEL</span>
+                <h2 className="font-heading text-xl sm:text-2xl font-extrabold text-navy-900">
+                  Select {selectedManufacturer.name} Model
                 </h2>
+                <p className="text-xs text-slate-500">
+                  Pick your exact EV model & variant to enable battery telemetry calculations.
+                </p>
               </div>
 
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                {selectedManufacturer.models.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => setSelectedModel(m)}
-                    className={`w-full p-4 rounded-xl border text-left flex items-center justify-between transition-all ${
-                      selectedModel?.id === m.id
-                        ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-500/20'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div>
-                      <div className="font-heading font-extrabold text-xs text-navy-900">{m.modelName}</div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        {m.variant} • {m.batteryCapacitykWh} kWh Pack • {m.realWorldRangeKm || m.ratedRangeKm} km Est. Range
+              {/* Models List */}
+              <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                {selectedManufacturer.models.map(m => {
+                  const isSelected = selectedModel?.id === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => setSelectedModel(m)}
+                      className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                        isSelected
+                          ? 'border-sky-500 bg-sky-50/50 ring-2 ring-sky-400/20 shadow-md scale-[1.01]'
+                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/80'
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                          <span>{m.modelName}</span>
+                          <span className="text-xs font-medium text-slate-500">({m.variant})</span>
+                        </div>
+                        <div className="text-xs font-mono text-slate-500 flex items-center gap-3">
+                          <span>{m.batteryCapacitykWh} kWh Battery</span>
+                          <span>•</span>
+                          <span className="text-sky-600 font-bold">{m.realWorldRangeKm || m.ratedRangeKm} km Range</span>
+                          <span>•</span>
+                          <span>{m.dcMaxPowerKW} kW DC Fast</span>
+                        </div>
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        DC Fast Charging: <strong className="text-slate-700">{m.dcMaxPowerKW} kW</strong> • Connectors: {m.connectorTypes.join(', ')}
-                      </div>
-                    </div>
-                    {selectedModel?.id === m.id && <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />}
-                  </button>
-                ))}
+                      {isSelected && <CheckCircle2 className="w-5 h-5 text-sky-500 shrink-0" />}
+                    </button>
+                  );
+                })}
               </div>
 
-              <div className="flex justify-between pt-2">
+              <div className="flex justify-between pt-4">
                 <button onClick={() => setStep(3)} className="vc-btn vc-btn-ghost text-xs">
                   <ArrowLeft className="w-4 h-4" /> Back
                 </button>
                 <button
                   onClick={() => setStep(5)}
                   disabled={!selectedModel}
-                  className="vc-btn vc-btn-teal py-3 px-6 text-xs font-bold disabled:opacity-50"
+                  className="vc-btn vc-btn-sky py-3.5 px-8 text-xs font-extrabold shadow-md hover:scale-[1.02] transition-all disabled:opacity-50 flex items-center gap-2"
                 >
-                  Configure Charge <ArrowRight className="w-4 h-4" />
+                  NEXT: STARTING BATTERY CHARGE <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
           )}
 
-          {/* STEP 5: CURRENT BATTERY CHARGE & FINAL CONFIRMATION */}
-          {step === 5 && selectedModel && selectedManufacturer && (
-            <div key="step-5" className="space-y-6 vc-trans-scale-fade text-center">
-              
+          {/* STEP 5: STARTING BATTERY SOC SELECTION & FINISH */}
+          {step === 5 && selectedManufacturer && selectedModel && (
+            <div className="space-y-6 text-center animate-in fade-in">
               {saveError && (
                 <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-3 text-left">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
