@@ -24,6 +24,10 @@ export function getAuthErrorMessage(error: any): string {
   const code = error?.code || '';
   const message = error?.message || '';
 
+  if (message.includes('Illegal url for new iframe') || code === 'auth/unauthorized-domain') {
+    return 'Domain authorization is completing in Firebase Console. If you recently added volt-connect-2-0.vercel.app to Authorized Domains, please allow 1-2 minutes for GCP propagation or sign in directly with Email & Password.';
+  }
+
   if (message.includes('missing initial state') || message.includes('storage-partitioned')) {
     return 'Google Sign-In was blocked by browser storage partitioning. Please allow cookies for this site or use Email & Password authentication.';
   }
@@ -68,7 +72,7 @@ export async function loginWithFirebase(email: string, pass: string): Promise<Fi
 
 /**
  * Authenticates user with Firebase Auth via Google Sign-In Provider.
- * Safely catches storage-partitioned browser environment errors.
+ * Safely catches storage-partitioned & iframe domain authorization errors.
  */
 export async function loginWithGoogle(): Promise<FirebaseUser> {
   const provider = new GoogleAuthProvider();
@@ -78,11 +82,9 @@ export async function loginWithGoogle(): Promise<FirebaseUser> {
     const cred = await signInWithPopup(firebaseAuth, provider);
     return cred.user;
   } catch (err: any) {
-    if (err?.message?.includes('missing initial state') || err?.code === 'auth/web-storage-unsupported') {
-      console.warn('[FirebaseAuth] Storage partitioning detected during Google popup auth:', err);
-      throw new Error('Google Sign-In popup was blocked by browser storage partitioning. Please allow cookies or use Email & Password sign-in.');
-    }
-    throw err;
+    console.warn('[FirebaseAuth] Google login error caught:', err);
+    const friendlyMsg = getAuthErrorMessage(err);
+    throw new Error(friendlyMsg);
   }
 }
 
