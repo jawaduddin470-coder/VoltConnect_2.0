@@ -6,6 +6,7 @@ import { chargingDataService } from '@/services/chargingDataService';
 import { rankStationsForVehicle } from '@/features/charging/utils/stationRanking';
 import { checkStationCompatibility } from '@/features/charging/utils/compatibility';
 import { VoltMap } from '@/features/charging/components/VoltMap';
+import { StationDirectory } from '@/features/charging/components/StationDirectory';
 import { EVVehicleSelector } from '@/components/common/EVVehicleSelector';
 import { ChargingStation, StationReport } from '@/types';
 import {
@@ -286,11 +287,11 @@ export const ExplorePage: React.FC = () => {
               </div>
             </div>
 
-            {/* View Mode Toggle */}
+            {/* View Mode Toggle Button */}
             <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
               <button
                 onClick={() => setViewMode('map')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
                   viewMode === 'map' ? 'bg-white text-navy-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -298,7 +299,7 @@ export const ExplorePage: React.FC = () => {
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
                   viewMode === 'list' ? 'bg-white text-navy-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -372,14 +373,14 @@ export const ExplorePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Map View Container */}
+      {/* Main View Container: Map or Directory */}
       <div className="flex-1 relative w-full h-[calc(100vh-140px)] min-h-[550px]">
         {loading ? (
           <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center z-50 text-white font-extrabold text-sm gap-3">
             <RefreshCw className="w-5 h-5 animate-spin text-sky-400" />
             <span>Loading 1,771 Charging Hubs...</span>
           </div>
-        ) : (
+        ) : viewMode === 'map' ? (
           <VoltMap
             stations={activeStationList}
             activeVehicle={activeVehicle}
@@ -388,6 +389,30 @@ export const ExplorePage: React.FC = () => {
             userLng={userLng}
             accuracy={accuracy}
             onSelectStation={st => setSelectedStation(st)}
+          />
+        ) : (
+          <StationDirectory
+            rankedStations={sortedRanked}
+            activeVehicle={activeVehicle}
+            selectedStation={selectedStation}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            onSelectStation={st => setSelectedStation(st)}
+            onViewOnMap={st => {
+              setSelectedStation(st);
+              setViewMode('map');
+            }}
+            onResetFilters={() => {
+              setSearchQuery('');
+              setSelectedCity('ALL');
+              setFilterCompatible(false);
+              setFilterAvailable(false);
+              setFilterFastCharging(false);
+              setFilterVerifiedOnly(false);
+              setFilterWithinRange(false);
+            }}
+            userLat={userLat}
+            userLng={userLng}
           />
         )}
       </div>
