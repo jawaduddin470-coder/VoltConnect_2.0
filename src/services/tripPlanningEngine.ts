@@ -10,7 +10,7 @@ import { ChargingStation, UserVehicle } from '@/types';
 import { checkStationCompatibility, normalizeConnectorType } from '@/features/charging/utils/compatibility';
 import { routingService, RouteResult, RouteWaypointInput } from './routingService';
 import { tollService, RouteTollSummary } from './tollService';
-import { journeyAnalyticsService, JourneyCostBreakdown, JourneyReadiness } from './journeyAnalyticsService';
+import { journeyAnalyticsService, JourneyCostBreakdown, JourneyReadinessResult } from './journeyAnalyticsService';
 
 export interface RecommendedChargingStop {
   station: ChargingStation;
@@ -39,7 +39,7 @@ export interface EVTripPlan {
   waypoints: RouteWaypointInput[];
   tollSummary: RouteTollSummary;
   costSummary: JourneyCostBreakdown;
-  readinessScore: JourneyReadiness;
+  readinessScore: JourneyReadinessResult;
 }
 
 class TripPlanningEngine {
@@ -285,7 +285,9 @@ class TripPlanningEngine {
       totalRoadDistanceKm,
       effectivePlanningRangeKm,
       recommendedStops,
-      activeVehicle
+      activeVehicle,
+      otherCompatibleStations.length,
+      costSummary.dataConfidence
     );
 
     return {
