@@ -276,7 +276,8 @@ class TripPlanningEngine {
       recommendedStops,
       tollSummary.totalTollCostINR,
       totalRoadDistanceKm,
-      activeVehicle
+      activeVehicle,
+      tollSummary.matchedPlazas
     );
     const readinessScore = journeyAnalyticsService.computeJourneyReadiness(
       startingSOCPercent,

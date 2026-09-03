@@ -707,9 +707,14 @@ export const SmartTripPlanner: React.FC = () => {
                 <span className="text-[10px] font-extrabold uppercase text-slate-400 font-mono tracking-wider">
                   ESTIMATED JOURNEY COST
                 </span>
-                <span className="font-mono font-black text-slate-900 text-base">
-                  ₹{tripPlan.costSummary.totalJourneyCostINR.toLocaleString('en-IN')}
-                </span>
+                <div className="font-mono font-black text-slate-900 text-base flex items-baseline gap-1.5">
+                  <span>₹{tripPlan.costSummary.totalJourneyCostINR.toLocaleString('en-IN')}</span>
+                  {tripPlan.costSummary.costPerKmINR > 0 && (
+                    <span className="text-[10px] text-sky-600 font-extrabold">
+                      (₹{tripPlan.costSummary.costPerKmINR}/km)
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-between text-[11px] font-mono text-slate-600">

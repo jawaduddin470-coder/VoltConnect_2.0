@@ -1,21 +1,40 @@
 /**
- * VOLTCONNECT 2.0 — JOURNEY ANALYTICS & READINESS ENGINE
- * Computes charging energy costs, total journey expenses, petrol/diesel ICE comparison,
- * and standard Journey Readiness Score (0-100).
+ * VOLTCONNECT 2.0 — JOURNEY COST INTELLIGENCE & READINESS ENGINE
+ * Computes traceable charging energy costs, highway tolls, cost per km,
+ * proportional expense distribution, dynamic cost insights, and petrol ICE comparison.
  */
 
 import { RecommendedChargingStop } from './tripPlanningEngine';
 import { UserVehicle } from '@/types';
 
+export interface StopCostDetail {
+  stationId: string;
+  stationName: string;
+  connectorType: string;
+  energyAddedKWh: number;
+  pricePerKWh: number;
+  isVerifiedPrice: boolean;
+  costINR: number;
+}
+
 export interface JourneyCostBreakdown {
   estimatedChargingCostINR: number;
   estimatedTollCostINR: number;
   totalJourneyCostINR: number;
-  iceEquivalentCostINR: number;
-  estimatedSavingsINR: number;
+  costPerKmINR: number;
   chargingCostPercent: number;
   tollCostPercent: number;
   kwhEnergyAddedTotal: number;
+  iceEquivalentCostINR: number;
+  estimatedSavingsINR: number;
+  chargingStopsCount: number;
+  tollPlazaCount: number;
+  pricedTollsCount: number;
+  unpricedTollsCount: number;
+  dataConfidence: 'HIGH_CONFIDENCE' | 'PARTIAL_ESTIMATED' | 'ESTIMATED' | 'UNAVAILABLE';
+  dataConfidenceMessage: string;
+  costInsight: string;
+  stopCostDetails: StopCostDetail[];
 }
 
 export interface JourneyReadiness {
@@ -33,39 +52,93 @@ export interface JourneyReadiness {
 class JourneyAnalyticsService {
   /**
    * Computes complete financial cost breakdown for charging energy and highway tolls.
+   * Prevents double-counting starting battery energy by charging ONLY for energy purchased at stops.
    */
   public computeJourneyCosts(
     recommendedStops: RecommendedChargingStop[],
     tollCostINR: number,
     totalDistanceKm: number,
-    activeVehicle: UserVehicle | null
+    activeVehicle: UserVehicle | null,
+    matchedTolls: any[] = []
   ): JourneyCostBreakdown {
-    // 1. Calculate Charging Energy Cost (kWh * verified pricing or avg ₹20/kWh on DC Fast Charger)
     let totalKWhAdded = 0;
     let totalChargingCostINR = 0;
+    let hasUnverifiedPricing = false;
+    const stopCostDetails: StopCostDetail[] = [];
 
-    recommendedStops.forEach(stop => {
-      const kwh = stop.energyAddedkWh || 45;
+    // Calculate energy purchased & tariff cost for each planned charging stop
+    recommendedStops.forEach((stop, idx) => {
+      const kwh = stop.energyAddedkWh || 40;
       totalKWhAdded += kwh;
-      // Get station charger price or fallback to standard ₹20 / kWh for DC Fast Charging
-      const avgRatePerKWh = stop.station.chargers[0]?.pricingPerKWh || 20;
-      totalChargingCostINR += Math.round(kwh * avgRatePerKWh);
-    });
 
-    // If no recommended charging stop needed (e.g. short journey within single battery charge)
-    if (recommendedStops.length === 0 && activeVehicle) {
-      // Estimate energy consumed from starting SOC (e.g. 0.18 kWh / km)
-      const consumedKWh = (totalDistanceKm * 0.18);
-      totalChargingCostINR = Math.round(consumedKWh * 8); // Home charging rate ~ ₹8/kWh
-    }
+      // Extract verified pricing from station chargers or use standard public DC fast charger rate (₹18/kWh)
+      const primaryCharger = stop.station.chargers[0];
+      const isVerified = Boolean(primaryCharger?.hasVerifiedPricing || (primaryCharger?.pricingPerKWh && primaryCharger.pricingPerKWh > 0));
+      const pricePerKWh = isVerified && primaryCharger?.pricingPerKWh ? primaryCharger.pricingPerKWh : 18;
+
+      if (!isVerified) hasUnverifiedPricing = true;
+
+      const stopCostINR = Math.round(kwh * pricePerKWh);
+      totalChargingCostINR += stopCostINR;
+
+      stopCostDetails.push({
+        stationId: stop.station.id,
+        stationName: stop.station.name,
+        connectorType: stop.connectorType || primaryCharger?.connectorType || 'CCS2',
+        energyAddedKWh: kwh,
+        pricePerKWh,
+        isVerifiedPrice: isVerified,
+        costINR: stopCostINR,
+      });
+    });
 
     const totalJourneyCostINR = totalChargingCostINR + tollCostINR;
 
-    // Proportional breakdown percentage
-    const chargingCostPercent = totalJourneyCostINR > 0 ? Math.round((totalChargingCostINR / totalJourneyCostINR) * 100) : 100;
+    // Cost Per Km calculation (Total Cost / Route Distance)
+    const costPerKmINR = totalDistanceKm > 0 ? Math.round((totalJourneyCostINR / totalDistanceKm) * 100) / 100 : 0;
+
+    // Proportional cost split percentage
+    const chargingCostPercent = totalJourneyCostINR > 0 ? Math.round((totalChargingCostINR / totalJourneyCostINR) * 100) : 0;
     const tollCostPercent = totalJourneyCostINR > 0 ? (100 - chargingCostPercent) : 0;
 
-    // 2. ICE Petrol Equivalent Comparison (Avg 14 km/L @ ₹102/L + Tolls)
+    // Toll breakdown tracking
+    const tollPlazaCount = matchedTolls.length;
+    let pricedTollsCount = 0;
+    let unpricedTollsCount = 0;
+
+    matchedTolls.forEach(t => {
+      if (t.plaza?.carTollFeeINR && t.plaza.carTollFeeINR > 0) {
+        pricedTollsCount++;
+      } else {
+        unpricedTollsCount++;
+      }
+    });
+
+    // Data Confidence Classification
+    let dataConfidence: 'HIGH_CONFIDENCE' | 'PARTIAL_ESTIMATED' | 'ESTIMATED' | 'UNAVAILABLE' = 'HIGH_CONFIDENCE';
+    let dataConfidenceMessage = 'High Confidence • Verified station tariffs and FASTag toll data';
+
+    if (hasUnverifiedPricing || unpricedTollsCount > 0) {
+      dataConfidence = 'PARTIAL_ESTIMATED';
+      dataConfidenceMessage = 'Estimated • Based on available station tariffs and FASTag toll rates';
+    }
+
+    if (totalJourneyCostINR === 0 && totalDistanceKm > 0) {
+      dataConfidence = 'ESTIMATED';
+      dataConfidenceMessage = 'Single-charge journey within starting battery range (No public charging required)';
+    }
+
+    // Dynamic Cost Insight Generation
+    let costInsight = '';
+    if (totalJourneyCostINR === 0) {
+      costInsight = '💡 Single-charge journey with no tolls required.';
+    } else if (chargingCostPercent >= tollCostPercent) {
+      costInsight = `💡 Charging accounts for ${chargingCostPercent}% of your estimated journey cost.`;
+    } else {
+      costInsight = `💡 Tolls account for ${tollCostPercent}% of your estimated journey cost.`;
+    }
+
+    // ICE Petrol Equivalent Comparison (Avg 14 km/L @ ₹102/L + Tolls)
     const iceFuelCost = Math.round((totalDistanceKm / 14) * 102);
     const iceEquivalentCostINR = iceFuelCost + tollCostINR;
     const estimatedSavingsINR = Math.max(0, iceEquivalentCostINR - totalJourneyCostINR);
@@ -74,11 +147,20 @@ class JourneyAnalyticsService {
       estimatedChargingCostINR: totalChargingCostINR,
       estimatedTollCostINR: tollCostINR,
       totalJourneyCostINR,
-      iceEquivalentCostINR,
-      estimatedSavingsINR,
+      costPerKmINR,
       chargingCostPercent,
       tollCostPercent,
       kwhEnergyAddedTotal: Math.round(totalKWhAdded),
+      iceEquivalentCostINR,
+      estimatedSavingsINR,
+      chargingStopsCount: recommendedStops.length,
+      tollPlazaCount,
+      pricedTollsCount,
+      unpricedTollsCount,
+      dataConfidence,
+      dataConfidenceMessage,
+      costInsight,
+      stopCostDetails,
     };
   }
 
@@ -120,33 +202,13 @@ class JourneyAnalyticsService {
       factors.push({ label: 'Corridor Charger Coverage', passed: true, detail: 'Verified high-power DC fast chargers available within vehicle range.' });
     } else {
       score -= 30;
-      factors.push({ label: 'Limited Corridor Charger Coverage', passed: false, detail: 'Route section has sparse compatible charging infrastructure.' });
+      factors.push({ label: 'Sparse Charger Corridor', passed: false, detail: 'Corridor charging density is low. Drive conservatively.' });
     }
 
-    // Factor 4: Connector Compatibility Check
-    const allGreen = recommendedStops.every(st => st.maxPowerKW >= 50);
-    if (allGreen) {
-      factors.push({ label: 'DC Fast Charge Compatibility', passed: true, detail: '100% of stops match vehicle CCS2 / DC Fast Charge connectors.' });
-    } else {
-      score -= 7;
-      factors.push({ label: 'Standard Charge Speed', passed: true, detail: 'Some stops utilize standard AC/DC power levels.' });
-    }
-
-    const finalScore = Math.max(30, Math.min(100, score));
-
-    let status: 'OPTIMAL' | 'READY' | 'WARNING' = 'OPTIMAL';
-    let headline = 'JOURNEY READY';
-    let subhead = 'Route fully verified with optimal charger placement and FASTag tolls.';
-
-    if (finalScore < 70) {
-      status = 'WARNING';
-      headline = 'JOURNEY REQUIRES ATTENTION';
-      subhead = 'Low battery or sparse charger density detected along section of route.';
-    } else if (finalScore < 90) {
-      status = 'READY';
-      headline = 'JOURNEY READY WITH CAUTION';
-      subhead = 'Ensure initial charge is topped up before departure.';
-    }
+    const finalScore = Math.max(0, Math.min(100, score));
+    const status = finalScore >= 85 ? 'OPTIMAL' : finalScore >= 65 ? 'READY' : 'WARNING';
+    const headline = status === 'OPTIMAL' ? 'Journey Optimal & Fully Prepared' : status === 'READY' ? 'Journey Ready with Cautions' : 'Low Readiness Score';
+    const subhead = `Readiness Score ${finalScore}/100 based on starting SOC (${startingSOCPercent}%), ${safetyReservePercent}% reserve, and charger density.`;
 
     return {
       score: finalScore,
