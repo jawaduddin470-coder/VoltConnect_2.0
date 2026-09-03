@@ -10,6 +10,7 @@ import { checkStationCompatibility } from '@/features/charging/utils/compatibili
 import { EVVehicleSelector } from '@/components/common/EVVehicleSelector';
 import { TripMap } from '@/features/charging/components/TripMap';
 import { TollAnalyticsModal } from '@/features/charging/components/TollAnalyticsModal';
+import { ReadinessDetailsModal } from '@/features/charging/components/ReadinessDetailsModal';
 import { ChargingStation } from '@/types';
 import {
   Navigation,
@@ -93,8 +94,12 @@ export const SmartTripPlanner: React.FC = () => {
   // Controls whether the planning form is open in header overlay when tripPlan is revealed
   const [showModifyForm, setShowModifyForm] = useState(false);
 
-  // Progressive Disclosure Modal State for Toll & Cost Analytics
+  // Progressive Disclosure Modal States
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+  const [showReadinessModal, setShowReadinessModal] = useState(false);
+
+  // Score Count-Up Animation State
+  const [animatedScore, setAnimatedScore] = useState(0);
 
   // Map Layer Controls (Charging Stations & Toll Plazas Toggles)
   const [showChargersOnMap, setShowChargersOnMap] = useState(true);
@@ -217,6 +222,34 @@ export const SmartTripPlanner: React.FC = () => {
       handlePlanJourney();
     }
   }, [activeVehicle?.id, activeVehicle?.currentBatteryPercent, safetyReservePercent]);
+
+  // Smooth Count-Up Animation Effect for Journey Readiness Score (600–900ms)
+  useEffect(() => {
+    if (!tripPlan?.readinessScore) return;
+    const target = tripPlan.readinessScore.score;
+
+    const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      setAnimatedScore(target);
+      return;
+    }
+
+    const duration = 750; // ms
+    const startTime = performance.now();
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easeOut = 1 - (1 - progress) * (1 - progress);
+      setAnimatedScore(Math.round(easeOut * target));
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+
+    requestAnimationFrame(animate);
+  }, [tripPlan?.readinessScore?.score]);
 
   // Live GPS Route Deviation Check (> 2.0 km)
   useEffect(() => {
@@ -769,6 +802,63 @@ export const SmartTripPlanner: React.FC = () => {
               </div>
             </div>
 
+            {/* Compact Phase 3B Journey Readiness Section */}
+            {tripPlan.readinessScore && (
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5 font-sans shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase text-slate-400 font-mono tracking-wider">
+                    JOURNEY READINESS
+                  </span>
+                  <span className="text-[9px] font-mono font-extrabold text-slate-500">
+                    CONFIDENCE · {tripPlan.readinessScore.confidence}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] border ${
+                      tripPlan.readinessScore.status === 'READY'
+                        ? 'bg-emerald-500/10 text-emerald-700 border-emerald-300'
+                        : tripPlan.readinessScore.status === 'READY_WITH_ATTENTION'
+                        ? 'bg-amber-500/10 text-amber-700 border-amber-300'
+                        : tripPlan.readinessScore.status === 'REVIEW'
+                        ? 'bg-amber-500/10 text-amber-700 border-amber-300'
+                        : 'bg-rose-500/10 text-rose-700 border-rose-300'
+                    }`}>
+                      {tripPlan.readinessScore.status === 'READY'
+                        ? '✓ JOURNEY READY'
+                        : tripPlan.readinessScore.status === 'READY_WITH_ATTENTION'
+                        ? '✓ READY WITH ATTENTION'
+                        : tripPlan.readinessScore.status === 'REVIEW'
+                        ? '⚠ PLAN NEEDS REVIEW'
+                        : '✕ NOT READY'}
+                    </span>
+                  </div>
+
+                  <div className="font-mono font-black text-slate-900 text-lg">
+                    {animatedScore} <span className="text-xs font-bold text-slate-400">/ 100</span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                  {tripPlan.readinessScore.warnings.length > 0
+                    ? tripPlan.readinessScore.warnings[0]
+                    : tripPlan.readinessScore.strengths[0] || 'Planned strategy provides sufficient route coverage.'}
+                </p>
+
+                <button
+                  onClick={() => setShowReadinessModal(true)}
+                  className="w-full mt-1 py-2 px-3 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-extrabold text-slate-800 flex items-center justify-between transition-colors shadow-2xs cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>View Readiness Details</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </button>
+              </div>
+            )}
+
             {/* Tab Selector: Recommended vs Other Compatible Route Chargers */}
             <div className="space-y-2">
               <div className="flex border-b border-slate-200 text-xs font-bold">
@@ -865,6 +955,14 @@ export const SmartTripPlanner: React.FC = () => {
         <TollAnalyticsModal
           tripPlan={tripPlan}
           onClose={() => setShowAnalyticsModal(false)}
+        />
+      )}
+
+      {/* Phase 3B Progressive Disclosure Journey Readiness Details Modal */}
+      {tripPlan && showReadinessModal && (
+        <ReadinessDetailsModal
+          tripPlan={tripPlan}
+          onClose={() => setShowReadinessModal(false)}
         />
       )}
 
