@@ -61,9 +61,6 @@ class TripPlanningEngine {
     // Effective Usable Planning Range = practicalRange * (1 - safetyReserve)
     const effectivePlanningRangeKm = Math.max(120, Math.round(nominalRangeKm * (1 - safetyReservePercent / 100)));
     
-    // Starting Range for Leg 1 derived directly from Starting SOC %
-    const leg1UsableRangeKm = Math.max(60, Math.round(effectivePlanningRangeKm * (startingSOCPercent / 100)));
-
     const totalRoadDistanceKm = routeResult.distanceKm;
     const totalDrivingDurationMinutes = routeResult.durationMinutes;
     const geometry = routeResult.geometry;
@@ -165,53 +162,50 @@ class TripPlanningEngine {
     const corridorList = corridorStations.filter(cs => cs.minDistanceToRouteKm <= 80);
     corridorList.sort((a, b) => a.approxDistFromOriginKm - b.approxDistFromOriginKm);
 
-    // 7. Route Charging Algorithm
+    // 7. Route Charging Algorithm — Safe Sequential Route Selection
     const recommendedStops: RecommendedChargingStop[] = [];
     let currentDistKm = 0;
-    let currentUsableRangeKm = leg1UsableRangeKm;
     let prevStopDistKm = 0;
+    let stopIndex = 0;
 
-    while (currentDistKm + currentUsableRangeKm < totalRoadDistanceKm) {
-      const targetDistKm = currentDistKm + currentUsableRangeKm * 0.85;
+    // Safe reachable distance per leg
+    const leg1MaxSafeKm = Math.round(nominalRangeKm * ((startingSOCPercent - safetyReservePercent) / 100));
+    const subsequentMaxSafeKm = Math.round(nominalRangeKm * ((85 - safetyReservePercent) / 100));
 
-      // Find candidates along the route within candidate window
-      const candidates = corridorList.filter(
-        cs => cs.approxDistFromOriginKm > currentDistKm + 5 && cs.approxDistFromOriginKm <= targetDistKm + 40
+    while (true) {
+      const currentDepSOC = stopIndex === 0 ? startingSOCPercent : 85;
+      const currentMaxSafeKm = stopIndex === 0 ? leg1MaxSafeKm : subsequentMaxSafeKm;
+      const remainingDistKm = totalRoadDistanceKm - currentDistKm;
+
+      // Check if destination is safely reachable without another stop
+      if (remainingDistKm <= currentMaxSafeKm) {
+        break;
+      }
+
+      // Target position for next stop (~88% of max safe range to allow candidate selection flexibility)
+      const targetDistFromOriginKm = currentDistKm + currentMaxSafeKm * 0.88;
+
+      // Filter candidates strictly within safe segment distance from current position
+      let candidates = corridorList.filter(
+        cs => cs.approxDistFromOriginKm > currentDistKm + 10 && cs.approxDistFromOriginKm <= currentDistKm + currentMaxSafeKm
       );
 
       if (candidates.length === 0) {
-        const fallbackCandidates = corridorList.filter(cs => cs.approxDistFromOriginKm > currentDistKm);
-        if (fallbackCandidates.length === 0) break;
-
-        const bestFallback = fallbackCandidates[0];
-        const maxKw = Math.max(...bestFallback.station.chargers.map(c => c.powerKW), 50);
-        const connType = bestFallback.station.chargers[0]?.connectorType || 'CCS2';
-
-        recommendedStops.push({
-          station: bestFallback.station,
-          distanceFromOriginKm: bestFallback.approxDistFromOriginKm,
-          distanceFromPreviousStopKm: bestFallback.approxDistFromOriginKm - prevStopDistKm,
-          detourDistanceKm: Math.round(bestFallback.minDistanceToRouteKm * 10) / 10,
-          estimatedArrivalSOCPercent: Math.max(10, Math.round(safetyReservePercent + 5)),
-          estimatedChargeTimeMinutes: Math.round((usableCapacitykWh * 0.7) / (maxKw / 60)),
-          energyAddedkWh: Math.round(usableCapacitykWh * 0.7),
-          maxPowerKW: maxKw,
-          connectorType: connType,
-        });
-
-        prevStopDistKm = bestFallback.approxDistFromOriginKm;
-        currentDistKm = bestFallback.approxDistFromOriginKm;
-        currentUsableRangeKm = effectivePlanningRangeKm;
-        continue;
+        // Fallback to any forward station within safe range
+        candidates = corridorList.filter(
+          cs => cs.approxDistFromOriginKm > currentDistKm + 5 && cs.approxDistFromOriginKm <= currentDistKm + currentMaxSafeKm + 30
+        );
+        if (candidates.length === 0) break;
       }
 
-      // Rank candidate stations
+      // Rank candidate stations:
+      // Prefer high power (DC fast charger), proximity to target distance, and minimal detour
       candidates.sort((a, b) => {
         const aMaxKw = Math.max(...a.station.chargers.map(c => c.powerKW), 0);
         const bMaxKw = Math.max(...b.station.chargers.map(c => c.powerKW), 0);
 
-        const aDistScore = 100 - Math.abs(a.approxDistFromOriginKm - targetDistKm);
-        const bDistScore = 100 - Math.abs(b.approxDistFromOriginKm - targetDistKm);
+        const aDistScore = 100 - Math.abs(a.approxDistFromOriginKm - targetDistFromOriginKm);
+        const bDistScore = 100 - Math.abs(b.approxDistFromOriginKm - targetDistFromOriginKm);
 
         const aScore = aMaxKw * 2 + aDistScore - a.minDistanceToRouteKm * 3;
         const bScore = bMaxKw * 2 + bDistScore - b.minDistanceToRouteKm * 3;
@@ -223,9 +217,9 @@ class TripPlanningEngine {
       const maxKw = Math.max(...selected.station.chargers.map(c => c.powerKW), 50);
       const connType = selected.station.chargers[0]?.connectorType || 'CCS2';
 
-      const distTraveledSincePrev = selected.approxDistFromOriginKm - prevStopDistKm;
-      const consumedRatio = distTraveledSincePrev / (prevStopDistKm === 0 ? leg1UsableRangeKm : effectivePlanningRangeKm);
-      const arrivalSOC = Math.max(10, Math.round((1 - consumedRatio) * 100));
+      const segDistKm = selected.approxDistFromOriginKm - prevStopDistKm;
+      const consumedRatio = segDistKm / nominalRangeKm;
+      const arrivalSOC = Math.max(10, Math.round(currentDepSOC - consumedRatio * 100));
 
       const chargeTimeMinutes = Math.round(((85 - arrivalSOC) / 100 * usableCapacitykWh) / (maxKw / 60));
       const energyAdded = Math.round(((85 - arrivalSOC) / 100) * usableCapacitykWh);
@@ -233,7 +227,7 @@ class TripPlanningEngine {
       recommendedStops.push({
         station: selected.station,
         distanceFromOriginKm: selected.approxDistFromOriginKm,
-        distanceFromPreviousStopKm: distTraveledSincePrev,
+        distanceFromPreviousStopKm: segDistKm,
         detourDistanceKm: Math.round(selected.minDistanceToRouteKm * 10) / 10,
         estimatedArrivalSOCPercent: arrivalSOC,
         estimatedChargeTimeMinutes: Math.max(15, chargeTimeMinutes),
@@ -244,7 +238,10 @@ class TripPlanningEngine {
 
       prevStopDistKm = selected.approxDistFromOriginKm;
       currentDistKm = selected.approxDistFromOriginKm;
-      currentUsableRangeKm = effectivePlanningRangeKm;
+      stopIndex++;
+
+      // Guard to prevent infinite loop
+      if (stopIndex > 25) break;
     }
 
     // 8. Classify remaining corridor stations
