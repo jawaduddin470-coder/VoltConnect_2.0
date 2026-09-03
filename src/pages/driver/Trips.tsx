@@ -127,12 +127,12 @@ export const SmartTripPlanner: React.FC = () => {
     setPlanBResult(null);
 
     try {
-      // Always ensure full station dataset is loaded
-      let dataset = stations;
-      if (dataset.length === 0) {
-        dataset = await chargingDataService.getStations();
-        setStations(dataset);
-      }
+      // Always retrieve authoritative dataset directly from chargingDataService
+      const dataset = await chargingDataService.getStations();
+      setStations(dataset);
+
+      const dataInfo = chargingDataService.getDataSourceInfo();
+      console.info(`[PLANNER INPUT] source=${dataInfo.source}, stationCount=${dataset.length}, vehicle=${activeVehicle?.manufacturer || 'BMW'} ${activeVehicle?.model || 'iX'}, SOC=${activeVehicle?.currentBatteryPercent ?? 100}, reserve=${safetyReservePercent}`);
 
       // 1. Calculate Real Road Route geometry & road distance via OSRM Driving Engine
       const routeResult = await routingService.calculateRoadRoute(waypoints);
@@ -144,6 +144,8 @@ export const SmartTripPlanner: React.FC = () => {
         dataset,
         safetyReservePercent
       );
+
+      console.info(`[PLANNER OUTPUT] recommendedStops=${plan.recommendedStops.length}, readiness=${plan.readinessScore.score}, status=${plan.readinessScore.status}`);
 
       setTripPlan(plan);
       setShowModifyForm(false);
