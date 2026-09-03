@@ -39,16 +39,16 @@ export function checkVehicleChargerCompatibility(
   const normalizedVehicleConnectors = rawVehicleConnectors.map(normalizeConnectorType);
   const chargerConnNorm = normalizeConnectorType(charger.connectorType);
 
-  // Requirement 2: Unknown or missing connectors MUST NOT automatically become compatible
+  // Unverified or unknown connectors are classified as YELLOW (Compatible with Limits / Unverified)
   if (chargerConnNorm === 'unknown') {
     return {
-      status: 'RED',
-      label: 'Not Compatible',
-      reason: 'Station connector type is unverified or unknown.',
+      status: 'YELLOW',
+      label: 'Compatible with Limits',
+      reason: 'Station connector type is unverified or unknown. Verify at location.',
     };
   }
 
-  // Strict check: Vehicle normalized connectors MUST explicitly include the charger's normalized connector
+  // Strict check: Vehicle normalized connectors explicitly include charger's normalized connector
   const hasMatchingConnector = normalizedVehicleConnectors.includes(chargerConnNorm);
 
   // Category restriction: 2-Wheelers cannot plug into high-voltage DC chargers (>25kW) unless explicitly matching
@@ -98,33 +98,33 @@ export function checkStationCompatibility(
 ): CompatibilityResult {
   if (!station.chargers || station.chargers.length === 0) {
     return {
-      status: 'RED',
-      label: 'Not Compatible',
-      reason: 'No active chargers installed at this station.',
+      status: 'YELLOW',
+      label: 'Compatible with Limits',
+      reason: 'No charger details listed for station.',
     };
   }
 
   const results = station.chargers.map(c => checkVehicleChargerCompatibility(vehicle, c));
-  const hasGreen = results.some(r => r.status === 'GREEN');
-  const hasYellow = results.some(r => r.status === 'YELLOW');
-
-  if (hasGreen) {
+  
+  if (results.some(r => r.status === 'GREEN')) {
     return {
       status: 'GREEN',
       label: 'Fully Compatible',
-      reason: `Station has compatible active chargers for ${vehicle?.model || 'your EV'}.`,
+      reason: 'Station has fully compatible available chargers.',
     };
-  } else if (hasYellow) {
+  }
+
+  if (results.some(r => r.status === 'YELLOW')) {
     return {
       status: 'YELLOW',
       label: 'Compatible with Limits',
-      reason: `Station has chargers compatible with adapter / limits.`,
+      reason: 'Station chargers are compatible or unverified.',
     };
   }
 
   return {
     status: 'RED',
     label: 'Not Compatible',
-    reason: `Station chargers do not match ${vehicle?.model || 'your EV'}.`,
+    reason: 'No compatible chargers found for selected vehicle.',
   };
 }

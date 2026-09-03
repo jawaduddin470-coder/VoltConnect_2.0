@@ -174,9 +174,9 @@ class TripPlanningEngine {
     while (currentDistKm + currentUsableRangeKm < totalRoadDistanceKm) {
       const targetDistKm = currentDistKm + currentUsableRangeKm * 0.85;
 
-      // Find candidates along the route within 120km before targetDistKm
+      // Find candidates along the route within candidate window
       const candidates = corridorList.filter(
-        cs => cs.approxDistFromOriginKm > currentDistKm + 30 && cs.approxDistFromOriginKm <= targetDistKm + 40
+        cs => cs.approxDistFromOriginKm > currentDistKm + 5 && cs.approxDistFromOriginKm <= targetDistKm + 40
       );
 
       if (candidates.length === 0) {

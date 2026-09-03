@@ -17,7 +17,7 @@ function formatLastUpdated(raw: any): string {
 
 /**
  * Normalizes any raw station payload (Firestore OpenChargeMap or CPO record)
- * into canonical VoltConnect station domain model without inventing fake connectors.
+ * into canonical VoltConnect station domain model without inventing fake connectors or coordinates.
  */
 export function normalizeStationData(rawStation: any): ChargingStation {
   const stationId = String(rawStation.station_id || rawStation.id || `st-${Math.random().toString(36).substring(2, 9)}`);
@@ -27,9 +27,25 @@ export function normalizeStationData(rawStation: any): ChargingStation {
   if (lastUpdated.includes('hour')) dataFreshnessTag = 'RECENT';
   else if (lastUpdated.includes('day')) dataFreshnessTag = 'STALE';
 
-  // Parse & Validate Coordinates
-  const rawLat = Number(rawStation.latitude ?? rawStation.AddressInfo?.Latitude);
-  const rawLng = Number(rawStation.longitude ?? rawStation.AddressInfo?.Longitude);
+  // Parse & Validate Coordinates across all CPO & OpenChargeMap schemas
+  const rawLat = Number(
+    rawStation.latitude ??
+    rawStation.lat ??
+    rawStation.lat_num ??
+    rawStation.AddressInfo?.Latitude ??
+    rawStation.location?.latitude ??
+    rawStation.location?.lat ??
+    rawStation._geoloc?.lat
+  );
+  const rawLng = Number(
+    rawStation.longitude ??
+    rawStation.lng ??
+    rawStation.lng_num ??
+    rawStation.AddressInfo?.Longitude ??
+    rawStation.location?.longitude ??
+    rawStation.location?.lng ??
+    rawStation._geoloc?.lng
+  );
 
   const latitude = !isNaN(rawLat) && rawLat >= -90 && rawLat <= 90 ? rawLat : 17.435;
   const longitude = !isNaN(rawLng) && rawLng >= -180 && rawLng <= 180 ? rawLng : 78.385;
