@@ -9,6 +9,7 @@ import { tripPlanningEngine, EVTripPlan, RecommendedChargingStop } from '@/servi
 import { checkStationCompatibility } from '@/features/charging/utils/compatibility';
 import { EVVehicleSelector } from '@/components/common/EVVehicleSelector';
 import { TripMap } from '@/features/charging/components/TripMap';
+import { TollAnalyticsModal } from '@/features/charging/components/TollAnalyticsModal';
 import { ChargingStation } from '@/types';
 import {
   Navigation,
@@ -34,6 +35,8 @@ import {
   ChevronDown,
   ChevronUp,
   Battery,
+  ChevronRight,
+  Receipt,
 } from 'lucide-react';
 
 export const SmartTripPlanner: React.FC = () => {
@@ -88,6 +91,9 @@ export const SmartTripPlanner: React.FC = () => {
   
   // Controls whether the planning form is open in header overlay when tripPlan is revealed
   const [showModifyForm, setShowModifyForm] = useState(false);
+
+  // Progressive Disclosure Modal State for Toll & Cost Analytics
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
 
   // Live Route Tracking State (Honest Labeling - NO fake turn-by-turn navigation)
   const [isLiveTracking, setIsLiveTracking] = useState(false);
@@ -230,7 +236,7 @@ export const SmartTripPlanner: React.FC = () => {
               <Navigation className="w-5 h-5 text-sky-500" /> VoltTrip EV Route Planning Engine
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Vehicle-aware highway journey routing & corridor charger discovery
+              Vehicle-aware highway journey routing, toll intelligence & corridor charger discovery
             </p>
           </div>
 
@@ -407,7 +413,7 @@ export const SmartTripPlanner: React.FC = () => {
               Where are you traveling with your EV?
             </h2>
             <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-              Enter your origin and destination. VoltTrip calculates your exact road distance, safe planning range, and compatible charging stops along the route.
+              Enter your origin and destination. VoltTrip calculates your exact road distance, safe planning range, compatible charging stops, and FASTag toll intelligence along the route.
             </p>
           </div>
 
@@ -518,7 +524,7 @@ export const SmartTripPlanner: React.FC = () => {
             >
               {isPlanning ? (
                 <>
-                  <RefreshCw className="w-5 h-5 animate-spin" /> Calculating Road Route & Chargers...
+                  <RefreshCw className="w-5 h-5 animate-spin" /> Calculating Road Route, Tolls & Chargers...
                 </>
               ) : (
                 <>
@@ -544,7 +550,7 @@ export const SmartTripPlanner: React.FC = () => {
                 className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs cursor-pointer"
               >
                 <div className="font-extrabold text-xs text-slate-900">Hyderabad ➔ Srinagar</div>
-                <div className="text-[10px] font-mono text-slate-400">~2,300 km • Long Haul</div>
+                <div className="text-[10px] font-mono text-slate-400">~2,300 km • NH 44 Corridor</div>
               </button>
 
               <button
@@ -557,7 +563,7 @@ export const SmartTripPlanner: React.FC = () => {
                 className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs cursor-pointer"
               >
                 <div className="font-extrabold text-xs text-slate-900">Hyderabad ➔ Bangalore</div>
-                <div className="text-[10px] font-mono text-slate-400">~570 km • Express</div>
+                <div className="text-[10px] font-mono text-slate-400">~570 km • Express Route</div>
               </button>
 
               <button
@@ -570,7 +576,7 @@ export const SmartTripPlanner: React.FC = () => {
                 className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs cursor-pointer"
               >
                 <div className="font-extrabold text-xs text-slate-900">Mumbai ➔ Goa</div>
-                <div className="text-[10px] font-mono text-slate-400">~590 km • Coastal</div>
+                <div className="text-[10px] font-mono text-slate-400">~590 km • Coastal NH 66</div>
               </button>
 
               <button
@@ -583,7 +589,7 @@ export const SmartTripPlanner: React.FC = () => {
                 className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs cursor-pointer"
               >
                 <div className="font-extrabold text-xs text-slate-900">Delhi ➔ Manali</div>
-                <div className="text-[10px] font-mono text-slate-400">~530 km • Mountain</div>
+                <div className="text-[10px] font-mono text-slate-400">~530 km • Mountain NH 21</div>
               </button>
             </div>
           </div>
@@ -643,7 +649,9 @@ export const SmartTripPlanner: React.FC = () => {
           </div>
 
           {/* Left Floating Trip Plan Summary Drawer */}
-          <div className="absolute top-4 left-4 z-20 max-w-sm w-full bg-white/95 backdrop-blur-md rounded-3xl border border-slate-200 shadow-2xl p-6 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+          <div className="absolute top-4 left-4 z-20 max-w-sm w-full bg-white/95 backdrop-blur-md rounded-3xl border border-slate-200 shadow-2xl p-5 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto font-sans">
+            
+            {/* Header: EV Journey Summary */}
             <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
               <div>
                 <span className="text-[10px] font-extrabold uppercase text-sky-600 font-mono tracking-wider">
@@ -658,6 +666,60 @@ export const SmartTripPlanner: React.FC = () => {
                 className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 <Edit2 className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Subtle Journey Readiness Score Badge */}
+            <div className="p-3 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-950 text-white flex items-center justify-between shadow-xs border border-slate-800">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-xs font-extrabold tracking-wide text-slate-100">
+                  {tripPlan.readinessScore.headline}
+                </span>
+              </div>
+              <span className="font-mono text-xs font-extrabold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                {tripPlan.readinessScore.score}/100
+              </span>
+            </div>
+
+            {/* Compact Journey Cost Breakdown & Split Bar */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold uppercase text-slate-400 font-mono tracking-wider">
+                  ESTIMATED JOURNEY COST
+                </span>
+                <span className="font-mono font-black text-slate-900 text-base">
+                  ₹{tripPlan.costSummary.totalJourneyCostINR.toLocaleString('en-IN')}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] font-mono text-slate-600">
+                <span>⚡ Charging ₹{tripPlan.costSummary.estimatedChargingCostINR.toLocaleString('en-IN')}</span>
+                <span>🛣️ Tolls ₹{tripPlan.costSummary.estimatedTollCostINR.toLocaleString('en-IN')}</span>
+              </div>
+
+              {/* Simple Proportional Split Bar */}
+              <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden flex shadow-inner">
+                <div
+                  style={{ width: `${tripPlan.costSummary.chargingCostPercent}%` }}
+                  className="h-full bg-sky-500"
+                />
+                <div
+                  style={{ width: `${tripPlan.costSummary.tollCostPercent}%` }}
+                  className="h-full bg-amber-500"
+                />
+              </div>
+
+              {/* Progressive Disclosure Trigger Button */}
+              <button
+                onClick={() => setShowAnalyticsModal(true)}
+                className="w-full mt-1.5 py-2 px-3 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-extrabold text-slate-800 flex items-center justify-between transition-colors shadow-2xs cursor-pointer"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5 text-sky-600" />
+                  <span>View Cost & Toll Details</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
             </div>
 
@@ -715,7 +777,7 @@ export const SmartTripPlanner: React.FC = () => {
                     <span>No charging stops required for this route distance!</span>
                   </div>
                 ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                     {tripPlan.recommendedStops.map((stop, idx) => (
                       <div
                         key={idx}
@@ -744,7 +806,7 @@ export const SmartTripPlanner: React.FC = () => {
                   </div>
                 )
               ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                   {tripPlan.otherCompatibleStations.map((stop, idx) => (
                     <div
                       key={idx}
@@ -772,6 +834,14 @@ export const SmartTripPlanner: React.FC = () => {
 
           </div>
         </div>
+      )}
+
+      {/* Progressive Disclosure Toll & Cost Analytics Modal */}
+      {tripPlan && showAnalyticsModal && (
+        <TollAnalyticsModal
+          tripPlan={tripPlan}
+          onClose={() => setShowAnalyticsModal(false)}
+        />
       )}
 
       {/* Vehicle Selector Modal */}
