@@ -136,10 +136,11 @@ export function normalizeStationData(rawStation: any): ChargingStation {
 class ChargingDataService {
   private cache: ChargingStation[] | null = null;
   private reports: StationReport[] = [];
+  private currentSource: 'FIRESTORE' | 'LOCAL_FALLBACK' = 'LOCAL_FALLBACK';
 
   /**
    * Fetches charging station dataset from Firestore with local caching.
-   * Auto-seeds INITIAL_CHARGING_STATIONS if Firestore returns empty collection.
+   * Auto-seeds INITIAL_CHARGING_STATIONS if Firestore returns empty collection or offline.
    */
   async getStations(): Promise<ChargingStation[]> {
     if (this.cache && this.cache.length > 0) {
@@ -149,9 +150,10 @@ class ChargingDataService {
     try {
       const firestoreDocs = await fetchFirestoreStations();
       if (firestoreDocs && firestoreDocs.length > 0) {
-        const normalized = firestoreDocs.map(normalizeStationData);
-        this.cache = normalized;
-        return normalized;
+        this.cache = firestoreDocs;
+        this.currentSource = 'FIRESTORE';
+        console.info(`[VoltConnect] Charging dataset source: FIRESTORE (${firestoreDocs.length} stations).`);
+        return firestoreDocs;
       }
     } catch (err) {
       console.warn('[ChargingDataService] Firestore fetch fallback to seed:', err);
@@ -159,7 +161,16 @@ class ChargingDataService {
 
     const fallbackNormalized = INITIAL_CHARGING_STATIONS.map(normalizeStationData);
     this.cache = fallbackNormalized;
+    this.currentSource = 'LOCAL_FALLBACK';
+    console.info(`[VoltConnect] Charging dataset source: LOCAL_FALLBACK (${fallbackNormalized.length} seed stations).`);
     return fallbackNormalized;
+  }
+
+  getDataSourceInfo(): { source: 'FIRESTORE' | 'LOCAL_FALLBACK'; count: number } {
+    return {
+      source: this.currentSource,
+      count: this.cache ? this.cache.length : 0,
+    };
   }
 
   async getAllReports(): Promise<StationReport[]> {
