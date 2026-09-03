@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserLocation } from '@/hooks/useUserLocation';
@@ -8,8 +8,8 @@ import { routingService, RouteWaypointInput, RouteResult } from '@/services/rout
 import { tripPlanningEngine, EVTripPlan, RecommendedChargingStop } from '@/services/tripPlanningEngine';
 import { checkStationCompatibility } from '@/features/charging/utils/compatibility';
 import { EVVehicleSelector } from '@/components/common/EVVehicleSelector';
+import { TripMap } from '@/features/charging/components/TripMap';
 import { ChargingStation } from '@/types';
-import L from 'leaflet';
 import {
   Navigation,
   MapPin,
@@ -96,14 +96,6 @@ export const SmartTripPlanner: React.FC = () => {
 
   // Vehicle Selection Modal State
   const [showVehicleModal, setShowVehicleModal] = useState(false);
-
-  // Map Refs
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<L.Map | null>(null);
-  const routePolylineRef = useRef<L.Polyline | null>(null);
-  const stopMarkersRef = useRef<L.LayerGroup | null>(null);
-  const userMarkerRef = useRef<L.Marker | null>(null);
-  const accuracyCircleRef = useRef<L.Circle | null>(null);
 
   // Fetch Firestore Charging Station Dataset on mount
   useEffect(() => {
@@ -212,262 +204,17 @@ export const SmartTripPlanner: React.FC = () => {
     }
   }, [activeVehicle?.id, activeVehicle?.currentBatteryPercent, safetyReservePercent]);
 
-  // Map Initialization & High-Contrast Marker Rendering (Executed ONLY when tripPlan is revealed)
+  // Live GPS Route Deviation Check (> 2.0 km)
   useEffect(() => {
-    if (!tripPlan || !mapContainerRef.current) return;
-
-    const containerEl = mapContainerRef.current;
-
-    if (!mapInstanceRef.current) {
-      const map = L.map(containerEl, {
-        center: [20.5937, 78.9629],
-        zoom: 5,
-        zoomControl: false,
-        preferCanvas: true,
-      });
-
-      L.control.zoom({ position: 'topright' }).addTo(map);
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-      }).addTo(map);
-
-      stopMarkersRef.current = L.layerGroup().addTo(map);
-      mapInstanceRef.current = map;
-
-      map.on('dragstart', () => {
-        setFollowMe(false);
-      });
+    if (userLat !== null && userLng !== null && isLiveTracking && tripPlan && tripPlan.routeGeometry.length > 0) {
+      let minDevDistKm = 999;
+      for (const pt of tripPlan.routeGeometry) {
+        const d = routingService.haversineDistance(userLat, userLng, pt[0], pt[1]);
+        if (d < minDevDistKm) minDevDistKm = d;
+      }
+      setRouteDeviated(minDevDistKm > 2.0);
     }
-
-    const map = mapInstanceRef.current;
-    const stopGroup = stopMarkersRef.current;
-
-    // Helper to safely invalidate map size and fit route bounds once container has non-zero dimensions
-    const fitRouteBoundsSafely = () => {
-      if (!map || !routePolylineRef.current || !containerEl) return;
-      
-      map.invalidateSize();
-      
-      const poly = routePolylineRef.current;
-      const bounds = poly.getBounds();
-      
-      if (bounds.isValid() && containerEl.clientWidth > 0 && containerEl.clientHeight > 0) {
-        map.fitBounds(bounds, { padding: [50, 50] });
-      }
-    };
-
-    // Attach ResizeObserver to container element to handle Chromium reflow & resize
-    const resizeObserver = new ResizeObserver(() => {
-      if (map) {
-        fitRouteBoundsSafely();
-      }
-    });
-
-    resizeObserver.observe(containerEl);
-
-    if (tripPlan && map && stopGroup) {
-      stopGroup.clearLayers();
-
-      // Render Real Road Route Polyline Line
-      if (routePolylineRef.current) {
-        routePolylineRef.current.remove();
-      }
-
-      if (tripPlan.routeGeometry && tripPlan.routeGeometry.length > 0) {
-        const polyline = L.polyline(tripPlan.routeGeometry, {
-          color: '#0EA5E9',
-          weight: 5,
-          opacity: 0.85,
-          lineCap: 'round',
-          lineJoin: 'round',
-        }).addTo(map);
-        routePolylineRef.current = polyline;
-
-        // Try immediate fit + deferred rAF fit for Chrome layout reflow
-        fitRouteBoundsSafely();
-        requestAnimationFrame(() => {
-          fitRouteBoundsSafely();
-        });
-      }
-
-      // High-Contrast Map Origin & Destination Markers (DARK NAVY TEXT ON SOLID WHITE BACKGROUND)
-      tripPlan.waypoints.forEach((wp, idx) => {
-        const isOrigin = idx === 0;
-        const isDest = idx === tripPlan.waypoints.length - 1;
-        const themeColor = isOrigin ? '#059669' : isDest ? '#DC2626' : '#2563EB';
-
-        const pinIcon = L.divIcon({
-          className: 'custom-route-wp',
-          html: `
-            <div style="
-              display: flex;
-              align-items: center;
-              gap: 6px;
-              background: #FFFFFF;
-              color: #0F172A;
-              font-weight: 800;
-              font-size: 11px;
-              font-family: system-ui, -apple-system, sans-serif;
-              padding: 6px 14px;
-              border-radius: 9999px;
-              border: 2.5px solid ${themeColor};
-              box-shadow: 0 10px 20px -3px rgba(0,0,0,0.35), 0 4px 6px -4px rgba(0,0,0,0.2);
-              white-space: nowrap;
-              pointer-events: auto;
-            ">
-              <span style="
-                display: inline-block;
-                width: 9px;
-                height: 9px;
-                background: ${themeColor};
-                border-radius: 50%;
-              "></span>
-              <span style="color: ${themeColor}; font-weight: 900; font-size: 10px; text-transform: uppercase;">
-                ${isOrigin ? 'START' : isDest ? 'DESTINATION' : 'WAYPOINT'}
-              </span>
-              <span style="color: #0F172A; font-weight: 800; font-size: 11px;">
-                ${wp.name.split(',')[0]}
-              </span>
-            </div>
-          `,
-          iconAnchor: [70, 20],
-        });
-
-        L.marker([wp.latitude, wp.longitude], { icon: pinIcon }).addTo(stopGroup);
-      });
-
-      // Render Numbered Recommended Charging Markers (⚡ 1, ⚡ 2, ⚡ 3)
-      tripPlan.recommendedStops.forEach((stop, idx) => {
-        const stopIcon = L.divIcon({
-          className: 'custom-charging-stop-rec',
-          html: `
-            <div style="
-              width: 36px;
-              height: 36px;
-              background: linear-gradient(135deg, #0EA5E9 0%, #0F172A 100%);
-              border: 2.5px solid #38BDF8;
-              border-radius: 50%;
-              color: white;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-weight: 800;
-              font-size: 11px;
-              box-shadow: 0 4px 14px rgba(14,165,233,0.6);
-              cursor: pointer;
-            ">
-              ⚡${idx + 1}
-            </div>
-          `,
-          iconSize: [36, 36],
-          iconAnchor: [18, 18],
-        });
-
-        const marker = L.marker([stop.station.latitude, stop.station.longitude], { icon: stopIcon });
-        marker.on('click', () => setSelectedStop(stop));
-        stopGroup.addLayer(marker);
-      });
-
-      // Render Other Compatible Route Charging Markers (⚡)
-      tripPlan.otherCompatibleStations.forEach((stop) => {
-        const otherIcon = L.divIcon({
-          className: 'custom-charging-stop-other',
-          html: `
-            <div style="
-              width: 28px;
-              height: 28px;
-              background: #1E293B;
-              border: 2px solid #38BDF8;
-              border-radius: 50%;
-              color: #38BDF8;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-weight: 800;
-              font-size: 10px;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-              cursor: pointer;
-            ">
-              ⚡
-            </div>
-          `,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
-        });
-
-        const marker = L.marker([stop.station.latitude, stop.station.longitude], { icon: otherIcon });
-        marker.on('click', () => setSelectedStop(stop));
-        stopGroup.addLayer(marker);
-      });
-    }
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [tripPlan]);
-
-  // Live GPS User Location Marker & Route Deviation Check
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map || !tripPlan) return;
-
-    if (userLat !== null && userLng !== null && isLiveTracking) {
-      const userCoords: L.LatLngTuple = [userLat, userLng];
-
-      const userIcon = L.divIcon({
-        className: 'user-live-marker',
-        html: `
-          <div style="position: relative; display: flex; align-items: center; justify-content: center;">
-            <div style="width: 20px; height: 20px; background: #0EA5E9; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 16px #0EA5E9; z-index: 2;"></div>
-            <div style="position: absolute; width: 40px; height: 40px; background: rgba(14,165,233,0.25); border-radius: 50%; animation: ping 2s infinite; z-index: 1;"></div>
-          </div>
-        `,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20],
-      });
-
-      if (userMarkerRef.current) {
-        userMarkerRef.current.setLatLng(userCoords);
-      } else {
-        userMarkerRef.current = L.marker(userCoords, { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
-      }
-
-      if (accuracy && accuracy > 0) {
-        if (accuracyCircleRef.current) {
-          accuracyCircleRef.current.setLatLng(userCoords);
-          accuracyCircleRef.current.setRadius(accuracy);
-        } else {
-          accuracyCircleRef.current = L.circle(userCoords, {
-            radius: accuracy,
-            color: '#0EA5E9',
-            fillColor: '#38BDF8',
-            fillOpacity: 0.15,
-          }).addTo(map);
-        }
-      }
-
-      if (followMe) {
-        map.panTo(userCoords, { animate: true });
-      }
-
-      // Route Deviation Detection Check (> 2.0 km)
-      if (tripPlan && tripPlan.routeGeometry.length > 0) {
-        let minDevDistKm = 999;
-        for (const pt of tripPlan.routeGeometry) {
-          const d = routingService.haversineDistance(userLat, userLng, pt[0], pt[1]);
-          if (d < minDevDistKm) minDevDistKm = d;
-        }
-
-        if (minDevDistKm > 2.0) {
-          setRouteDeviated(true);
-        } else {
-          setRouteDeviated(false);
-        }
-      }
-    }
-  }, [userLat, userLng, accuracy, isLiveTracking, followMe, tripPlan]);
+  }, [userLat, userLng, isLiveTracking, tripPlan]);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
@@ -487,7 +234,7 @@ export const SmartTripPlanner: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowVehicleModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-extrabold flex items-center gap-2 shadow-xs"
+              className="px-3.5 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-extrabold flex items-center gap-2 shadow-xs cursor-pointer"
             >
               <Car className="w-3.5 h-3.5 text-sky-400" />
               <span>{activeVehicle ? `${activeVehicle.manufacturer} ${activeVehicle.model}` : 'Select Vehicle'}</span>
@@ -528,7 +275,7 @@ export const SmartTripPlanner: React.FC = () => {
             {tripPlan && (
               <button
                 onClick={() => setShowModifyForm(!showModifyForm)}
-                className="px-3.5 py-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-extrabold flex items-center gap-1.5 border border-sky-200"
+                className="px-3.5 py-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-extrabold flex items-center gap-1.5 border border-sky-200 cursor-pointer"
               >
                 <Edit2 className="w-3.5 h-3.5 text-sky-600" />
                 <span>{showModifyForm ? 'Close Form' : 'MODIFY DESTINATIONS'}</span>
@@ -548,7 +295,7 @@ export const SmartTripPlanner: React.FC = () => {
                 </span>
                 <button
                   onClick={() => setShowModifyForm(false)}
-                  className="text-xs text-slate-500 hover:text-slate-800 font-bold"
+                  className="text-xs text-slate-500 hover:text-slate-800 font-bold cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -591,10 +338,12 @@ export const SmartTripPlanner: React.FC = () => {
                                 setActiveSearchIndex(null);
                                 setSearchQuery('');
                               }}
-                              className="w-full text-left px-3.5 py-2 hover:bg-sky-50 border-b border-slate-100 flex items-center justify-between text-xs"
+                              className="w-full text-left px-4 py-2.5 hover:bg-sky-50 border-b border-slate-100 flex items-center justify-between text-xs transition-colors cursor-pointer"
                             >
                               <span className="font-bold text-slate-900">{res.name}</span>
-                              <span className="text-[10px] font-mono text-slate-400">{res.state || res.country}</span>
+                              <span className="text-[10px] font-mono text-slate-400">
+                                {res.state || res.country}
+                              </span>
                             </button>
                           ))}
                         </div>
@@ -624,15 +373,15 @@ export const SmartTripPlanner: React.FC = () => {
                     });
                     setWaypoints(updated);
                   }}
-                  className="text-xs font-bold text-sky-600 hover:underline flex items-center gap-1"
+                  className="text-xs font-bold text-sky-600 hover:underline flex items-center gap-1 cursor-pointer"
                 >
-                  <Plus className="w-3.5 h-3.5" /> Add Intermediate Stop
+                  <Plus className="w-4 h-4" /> Add Intermediate Stop
                 </button>
 
                 <button
                   onClick={handlePlanJourney}
                   disabled={isPlanning}
-                  className="vc-btn vc-btn-teal px-5 py-2 text-xs font-extrabold flex items-center gap-2"
+                  className="vc-btn vc-btn-teal px-5 py-2 text-xs font-extrabold flex items-center gap-2 cursor-pointer"
                 >
                   {isPlanning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
                   <span>RECALCULATE JOURNEY</span>
@@ -679,7 +428,7 @@ export const SmartTripPlanner: React.FC = () => {
                     {idx === 0 && (
                       <button
                         onClick={handleUseCurrentLocation}
-                        className="text-[11px] font-bold text-sky-600 hover:underline flex items-center gap-1"
+                        className="text-[11px] font-bold text-sky-600 hover:underline flex items-center gap-1 cursor-pointer"
                       >
                         <LocateFixed className="w-3.5 h-3.5" /> Use My Current Location
                       </button>
@@ -717,7 +466,7 @@ export const SmartTripPlanner: React.FC = () => {
                               setActiveSearchIndex(null);
                               setSearchQuery('');
                             }}
-                            className="w-full text-left px-4 py-3 hover:bg-sky-50 border-b border-slate-100 flex items-center justify-between text-xs transition-colors"
+                            className="w-full text-left px-4 py-3 hover:bg-sky-50 border-b border-slate-100 flex items-center justify-between text-xs transition-colors cursor-pointer"
                           >
                             <span className="font-bold text-slate-900">{res.name}</span>
                             <span className="text-[10px] font-mono text-slate-400">
@@ -732,7 +481,7 @@ export const SmartTripPlanner: React.FC = () => {
                   {idx > 0 && waypoints.length > 2 && (
                     <button
                       onClick={() => setWaypoints(waypoints.filter((_, i) => i !== idx))}
-                      className="absolute right-3 top-8 text-rose-500 hover:bg-rose-50 p-1.5 rounded-xl"
+                      className="absolute right-3 top-8 text-rose-500 hover:bg-rose-50 p-1.5 rounded-xl cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -752,7 +501,7 @@ export const SmartTripPlanner: React.FC = () => {
                   });
                   setWaypoints(updated);
                 }}
-                className="text-xs font-bold text-sky-600 hover:underline flex items-center gap-1"
+                className="text-xs font-bold text-sky-600 hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-4 h-4" /> Add Intermediate Stop
               </button>
@@ -762,7 +511,7 @@ export const SmartTripPlanner: React.FC = () => {
             <button
               onClick={handlePlanJourney}
               disabled={isPlanning}
-              className="w-full vc-btn vc-btn-teal py-4 font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg hover:scale-[1.01] transition-all"
+              className="w-full vc-btn vc-btn-teal py-4 font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg hover:scale-[1.01] transition-all cursor-pointer"
             >
               {isPlanning ? (
                 <>
@@ -789,7 +538,7 @@ export const SmartTripPlanner: React.FC = () => {
                     { name: 'Srinagar, Jammu & Kashmir', latitude: 34.0837, longitude: 74.7973 },
                   ]);
                 }}
-                className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs"
+                className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs cursor-pointer"
               >
                 <div className="font-extrabold text-xs text-slate-900">Hyderabad ➔ Srinagar</div>
                 <div className="text-[10px] font-mono text-slate-400">~2,300 km • Long Haul</div>
@@ -802,7 +551,7 @@ export const SmartTripPlanner: React.FC = () => {
                     { name: 'Bangalore, Karnataka', latitude: 12.9716, longitude: 77.5946 },
                   ]);
                 }}
-                className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs"
+                className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs cursor-pointer"
               >
                 <div className="font-extrabold text-xs text-slate-900">Hyderabad ➔ Bangalore</div>
                 <div className="text-[10px] font-mono text-slate-400">~570 km • Express</div>
@@ -815,7 +564,7 @@ export const SmartTripPlanner: React.FC = () => {
                     { name: 'Goa (Panaji)', latitude: 15.4909, longitude: 73.8278 },
                   ]);
                 }}
-                className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs"
+                className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs cursor-pointer"
               >
                 <div className="font-extrabold text-xs text-slate-900">Mumbai ➔ Goa</div>
                 <div className="text-[10px] font-mono text-slate-400">~590 km • Coastal</div>
@@ -828,7 +577,7 @@ export const SmartTripPlanner: React.FC = () => {
                     { name: 'Manali, Himachal Pradesh', latitude: 32.2432, longitude: 77.1892 },
                   ]);
                 }}
-                className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs"
+                className="p-3 rounded-2xl bg-white border border-slate-200 text-left hover:border-sky-400 transition-all space-y-1 shadow-xs cursor-pointer"
               >
                 <div className="font-extrabold text-xs text-slate-900">Delhi ➔ Manali</div>
                 <div className="text-[10px] font-mono text-slate-400">~530 km • Mountain</div>
@@ -843,9 +592,19 @@ export const SmartTripPlanner: React.FC = () => {
       {tripPlan && (
         <div className="flex-1 relative w-full h-[calc(100vh-160px)] min-h-[550px] flex overflow-hidden">
           
-          {/* Interactive Leaflet Map Container */}
+          {/* Interactive Dedicated Leaflet Map Component */}
           <div className="w-full h-full relative overflow-hidden">
-            <div ref={mapContainerRef} className="w-full h-full absolute inset-0 z-10" />
+            <TripMap
+              tripPlan={tripPlan}
+              selectedStop={selectedStop}
+              onSelectStop={st => setSelectedStop(st)}
+              isLiveTracking={isLiveTracking}
+              userLat={userLat}
+              userLng={userLng}
+              accuracy={accuracy}
+              followMe={followMe}
+              onDisableFollowMe={() => setFollowMe(false)}
+            />
 
             {/* Route Deviation Warning Banner */}
             {routeDeviated && (
@@ -870,7 +629,7 @@ export const SmartTripPlanner: React.FC = () => {
                   setIsLiveTracking(!isLiveTracking);
                   if (!isLiveTracking) requestLocation();
                 }}
-                className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold flex items-center gap-2 shadow-xl border transition-all ${
+                className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold flex items-center gap-2 shadow-xl border transition-all cursor-pointer ${
                   isLiveTracking
                     ? 'bg-sky-500 text-white border-sky-600 ring-2 ring-sky-300'
                     : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
@@ -894,7 +653,7 @@ export const SmartTripPlanner: React.FC = () => {
                 </div>
                 <button
                   onClick={() => setShowModifyForm(true)}
-                  className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+                  className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
@@ -927,7 +686,7 @@ export const SmartTripPlanner: React.FC = () => {
                 <div className="flex border-b border-slate-200 text-xs font-bold">
                   <button
                     onClick={() => setActiveTab('recommended')}
-                    className={`pb-2 px-3 border-b-2 transition-colors ${
+                    className={`pb-2 px-3 border-b-2 transition-colors cursor-pointer ${
                       activeTab === 'recommended'
                         ? 'border-sky-500 text-sky-600 font-extrabold'
                         : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -937,7 +696,7 @@ export const SmartTripPlanner: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setActiveTab('other')}
-                    className={`pb-2 px-3 border-b-2 transition-colors ${
+                    className={`pb-2 px-3 border-b-2 transition-colors cursor-pointer ${
                       activeTab === 'other'
                         ? 'border-sky-500 text-sky-600 font-extrabold'
                         : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -958,12 +717,7 @@ export const SmartTripPlanner: React.FC = () => {
                       {tripPlan.recommendedStops.map((stop, idx) => (
                         <div
                           key={idx}
-                          onClick={() => {
-                            setSelectedStop(stop);
-                            if (mapInstanceRef.current) {
-                              mapInstanceRef.current.panTo([stop.station.latitude, stop.station.longitude], { animate: true });
-                            }
-                          }}
+                          onClick={() => setSelectedStop(stop)}
                           className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all ${
                             selectedStop?.station.id === stop.station.id
                               ? 'bg-sky-50 border-sky-400 ring-2 ring-sky-200'
@@ -992,27 +746,22 @@ export const SmartTripPlanner: React.FC = () => {
                     {tripPlan.otherCompatibleStations.map((stop, idx) => (
                       <div
                         key={idx}
-                        onClick={() => {
-                          setSelectedStop(stop);
-                          if (mapInstanceRef.current) {
-                            mapInstanceRef.current.panTo([stop.station.latitude, stop.station.longitude], { animate: true });
-                          }
-                        }}
-                        className="p-3 rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs cursor-pointer"
+                        onClick={() => setSelectedStop(stop)}
+                        className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all ${
+                          selectedStop?.station.id === stop.station.id
+                            ? 'bg-sky-50 border-sky-400 ring-2 ring-sky-200'
+                            : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                        }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-800 text-xs truncate max-w-[180px]">
-                            {stop.station.name}
+                          <span className="font-extrabold text-slate-900 text-xs truncate max-w-[180px]">
+                            ⚡ {stop.station.name}
                           </span>
-                          <span className="text-[10px] font-mono text-slate-600">
+                          <span className="text-[10px] font-mono font-bold text-slate-500">
                             {stop.maxPowerKW} kW
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 truncate mt-0.5">{stop.station.address}</p>
-                        <div className="flex items-center justify-between pt-1.5 mt-1.5 border-t border-slate-200/60 text-[10px] font-mono text-slate-500">
-                          <span>Detour: {stop.detourDistanceKm} km</span>
-                          <span>Connector: {stop.connectorType}</span>
-                        </div>
                       </div>
                     ))}
                   </div>
@@ -1021,18 +770,17 @@ export const SmartTripPlanner: React.FC = () => {
 
             </div>
           </div>
-
         </div>
       )}
 
-      {/* Vehicle Selection Modal */}
+      {/* Vehicle Selector Modal */}
       {showVehicleModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-end pb-2">
               <button
                 onClick={() => setShowVehicleModal(false)}
-                className="p-2 rounded-full bg-white text-slate-500 hover:text-slate-900"
+                className="p-2 rounded-full bg-white text-slate-500 hover:text-slate-900 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
