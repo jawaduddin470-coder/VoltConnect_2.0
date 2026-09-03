@@ -216,8 +216,10 @@ export const SmartTripPlanner: React.FC = () => {
   useEffect(() => {
     if (!tripPlan || !mapContainerRef.current) return;
 
+    const containerEl = mapContainerRef.current;
+
     if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
+      const map = L.map(containerEl, {
         center: [20.5937, 78.9629],
         zoom: 5,
         zoomControl: false,
@@ -237,33 +239,36 @@ export const SmartTripPlanner: React.FC = () => {
       map.on('dragstart', () => {
         setFollowMe(false);
       });
-
-      // Immediate and delayed size invalidation for Chromium container reflow
-      map.invalidateSize();
-      setTimeout(() => {
-        map.invalidateSize();
-      }, 150);
     }
 
     const map = mapInstanceRef.current;
     const stopGroup = stopMarkersRef.current;
 
-    // Attach ResizeObserver to container element to ensure rendering in Chrome, Safari & Edge
+    // Helper to safely invalidate map size and fit route bounds once container has non-zero dimensions
+    const fitRouteBoundsSafely = () => {
+      if (!map || !routePolylineRef.current || !containerEl) return;
+      
+      map.invalidateSize();
+      
+      const poly = routePolylineRef.current;
+      const bounds = poly.getBounds();
+      
+      if (bounds.isValid() && containerEl.clientWidth > 0 && containerEl.clientHeight > 0) {
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    };
+
+    // Attach ResizeObserver to container element to handle Chromium reflow & resize
     const resizeObserver = new ResizeObserver(() => {
       if (map) {
-        map.invalidateSize();
+        fitRouteBoundsSafely();
       }
     });
 
-    if (mapContainerRef.current) {
-      resizeObserver.observe(mapContainerRef.current);
-    }
+    resizeObserver.observe(containerEl);
 
     if (tripPlan && map && stopGroup) {
       stopGroup.clearLayers();
-
-      // Ensure Leaflet has valid canvas dimensions before fitting polyline bounds
-      map.invalidateSize();
 
       // Render Real Road Route Polyline Line
       if (routePolylineRef.current) {
@@ -280,11 +285,11 @@ export const SmartTripPlanner: React.FC = () => {
         }).addTo(map);
         routePolylineRef.current = polyline;
 
-        // Fit map view to complete route bounds safely
-        const bounds = polyline.getBounds();
-        if (bounds.isValid()) {
-          map.fitBounds(bounds, { padding: [50, 50] });
-        }
+        // Try immediate fit + deferred rAF fit for Chrome layout reflow
+        fitRouteBoundsSafely();
+        requestAnimationFrame(() => {
+          fitRouteBoundsSafely();
+        });
       }
 
       // High-Contrast Map Origin & Destination Markers (DARK NAVY TEXT ON SOLID WHITE BACKGROUND)
@@ -836,7 +841,7 @@ export const SmartTripPlanner: React.FC = () => {
 
       {/* 3. MAP REVEAL VIEWPORT (SHOWN ONLY AFTER DESTINATION SUBMITTED & ROUTE CALCULATED) */}
       {tripPlan && (
-        <div className="flex-1 relative w-full h-[calc(100vh-160px)] min-h-[550px] flex overflow-hidden animate-in fade-in duration-500">
+        <div className="flex-1 relative w-full h-[calc(100vh-160px)] min-h-[550px] flex overflow-hidden">
           
           {/* Interactive Leaflet Map Container */}
           <div className="w-full h-full relative overflow-hidden">
