@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { EVTripPlan, RecommendedChargingStop } from '@/services/tripPlanningEngine';
-import { routingService } from '@/services/routingService';
 
 interface TripMapProps {
   tripPlan: EVTripPlan;
@@ -33,12 +32,11 @@ export const TripMap: React.FC<TripMapProps> = ({
   const userMarkerRef = useRef<L.Marker | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
 
-  // Effect 1: Map Initialization and Unmount Cleanup (Guarantees NO detached DOM refs)
+  // Effect 1: Initialize Leaflet Map once when component mounts
   useEffect(() => {
     const containerEl = mapContainerRef.current;
     if (!containerEl) return;
 
-    // Create Leaflet map instance bound to this exact DOM element
     const map = L.map(containerEl, {
       center: [20.5937, 78.9629],
       zoom: 5,
@@ -61,7 +59,7 @@ export const TripMap: React.FC<TripMapProps> = ({
       if (onDisableFollowMe) onDisableFollowMe();
     });
 
-    // Helper to safely invalidate size and fit bounds when container acquires dimensions
+    // Helper to safely invalidate size and fit bounds when container has non-zero client dimensions
     const handleResizeAndFit = () => {
       if (!map || !containerEl) return;
       map.invalidateSize();
@@ -80,7 +78,7 @@ export const TripMap: React.FC<TripMapProps> = ({
 
     resizeObserver.observe(containerEl);
 
-    // Initial size invalidations for Chrome/Blink reflow passes
+    // Initial size invalidations for Chrome/Blink layout reflow passes
     map.invalidateSize();
     setTimeout(() => {
       map.invalidateSize();
@@ -94,7 +92,7 @@ export const TripMap: React.FC<TripMapProps> = ({
         mapInstanceRef.current = null;
       }
     };
-  }, []); // Run ONCE on mount
+  }, []);
 
   // Effect 2: Update Route Geometry, Bounds, and Corridor Station Markers
   useEffect(() => {
@@ -129,7 +127,6 @@ export const TripMap: React.FC<TripMapProps> = ({
           map.fitBounds(bounds, { padding: [50, 50] });
         }
       } else {
-        // Defer fitBounds to rAF if container is establishing dimensions
         requestAnimationFrame(() => {
           if (map && routePolylineRef.current) {
             const bounds = routePolylineRef.current.getBounds();
