@@ -115,7 +115,7 @@ export const ReadinessDetailsModal: React.FC<ReadinessDetailsModalProps> = ({ tr
             </div>
 
             <p className="text-xs text-slate-700 leading-relaxed">
-              Your Journey Readiness score is calculated from starting battery SOC, segment-by-segment charging strategy, safety reserve buffer, corridor charger density, battery SOH, and route completeness.
+              Your Journey Readiness score is calculated from starting battery SOC, segment-by-segment charging strategy, safety reserve buffer, corridor charger density, and route completeness.
             </p>
           </div>
 
@@ -126,37 +126,48 @@ export const ReadinessDetailsModal: React.FC<ReadinessDetailsModalProps> = ({ tr
             </h3>
 
             <div className="grid grid-cols-1 gap-2">
-              {Object.entries(factors).map(([key, f]) => (
-                <div
-                  key={key}
-                  className="p-3.5 rounded-2xl bg-white border border-slate-200 flex items-start justify-between gap-3 shadow-2xs hover:border-slate-300 transition-colors"
-                >
-                  <div className="flex items-start gap-3 truncate">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center font-mono text-[10px] font-extrabold shrink-0 mt-0.5 ${
-                      f.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                    }`}>
-                      {f.passed ? '✓' : '⚠'}
-                    </div>
-                    <div className="truncate">
-                      <div className="font-extrabold text-slate-900 text-xs flex items-center gap-2">
-                        <span>{f.label}</span>
-                        <span className="text-[10px] font-mono text-slate-400 font-normal">
-                          ({f.score}/{f.maxScore} pts)
-                        </span>
+              {Object.entries(factors).map(([key, f]) => {
+                const isUnavailable = f.maxScore === 0;
+                return (
+                  <div
+                    key={key}
+                    className="p-3.5 rounded-2xl bg-white border border-slate-200 flex items-start justify-between gap-3 shadow-2xs hover:border-slate-300 transition-colors"
+                  >
+                    <div className="flex items-start gap-3 truncate">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center font-mono text-[10px] font-extrabold shrink-0 mt-0.5 ${
+                        isUnavailable
+                          ? 'bg-slate-100 text-slate-500'
+                          : f.passed
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {isUnavailable ? '—' : f.passed ? '✓' : '⚠'}
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5 truncate leading-relaxed">
-                        {f.detail}
-                      </p>
+                      <div className="truncate">
+                        <div className="font-extrabold text-slate-900 text-xs flex items-center gap-2">
+                          <span>{f.label}</span>
+                          <span className="text-[10px] font-mono text-slate-400 font-normal">
+                            {isUnavailable ? '(Omitted)' : `(${f.score}/${f.maxScore} pts)`}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 truncate leading-relaxed">
+                          {f.detail}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  <span className={`text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-md shrink-0 ${
-                    f.passed ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
-                  }`}>
-                    {f.passed ? 'PASSED' : 'ATTENTION'}
-                  </span>
-                </div>
-              ))}
+                    <span className={`text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-md shrink-0 ${
+                      isUnavailable
+                        ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                        : f.passed
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}>
+                      {isUnavailable ? 'UNAVAILABLE' : f.passed ? 'PASSED' : 'ATTENTION'}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

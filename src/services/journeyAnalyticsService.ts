@@ -1,8 +1,8 @@
 /**
- * VOLTCONNECT 2.0 — JOURNEY COST INTELLIGENCE & READINESS ENGINE (PHASE 3A)
+ * VOLTCONNECT 2.0 — JOURNEY COST INTELLIGENCE & READINESS ENGINE (PHASE 3A / CREDIBILITY AUDITED)
  * Computes traceable charging energy costs, highway tolls, cost per km,
  * proportional expense distribution, dynamic cost insights, petrol ICE comparison,
- * and a 100% deterministic 7-factor Journey Readiness Engine (0-100 score).
+ * and a 100% deterministic, credibility-audited 7-factor Journey Readiness Engine (0-100 score).
  */
 
 import { RecommendedChargingStop } from './tripPlanningEngine';
@@ -134,13 +134,13 @@ class JourneyAnalyticsService {
       }
     });
 
-    // Data Confidence Classification
+    // Data Confidence Classification (Factual & Provenance-Based)
     let dataConfidence: 'HIGH_CONFIDENCE' | 'PARTIAL_ESTIMATED' | 'ESTIMATED' | 'UNAVAILABLE' = 'HIGH_CONFIDENCE';
     let dataConfidenceMessage = 'High Confidence • Verified station tariffs and FASTag toll data';
 
     if (hasUnverifiedPricing || unpricedTollsCount > 0) {
       dataConfidence = 'PARTIAL_ESTIMATED';
-      dataConfidenceMessage = 'Estimated • Based on available station tariffs and FASTag toll rates';
+      dataConfidenceMessage = 'Estimated • Based on available CPO tariff data and FASTag LMV highway toll rates';
     }
 
     if (totalJourneyCostINR === 0 && totalDistanceKm > 0) {
@@ -185,7 +185,7 @@ class JourneyAnalyticsService {
   }
 
   /**
-   * Evaluates deterministic 7-factor Journey Readiness Score (0-100) per Phase 3A specification.
+   * Evaluates deterministic 7-factor Journey Readiness Score (0-100) per Credibility Audit specification.
    */
   public computeJourneyReadiness(
     startingSOCPercent: number,
@@ -208,7 +208,7 @@ class JourneyAnalyticsService {
           chargingPlan: { score: 0, maxScore: 25, passed: false, label: 'Charging-Plan Coverage', detail: 'Route distance not calculated.' },
           safetyReserve: { score: 0, maxScore: 15, passed: false, label: 'Safety Reserve', detail: 'Route distance not calculated.' },
           chargerCoverage: { score: 0, maxScore: 15, passed: false, label: 'Corridor Charger Coverage', detail: 'Route distance not calculated.' },
-          batteryHealth: { score: 0, maxScore: 10, passed: false, label: 'Battery Health (SOH)', detail: 'Route distance not calculated.' },
+          batteryHealth: { score: 0, maxScore: 0, passed: true, label: 'Battery Health (SOH)', detail: 'Route distance not calculated.' },
           routeData: { score: 0, maxScore: 5, passed: false, label: 'Route Data Completeness', detail: 'Route distance missing.' },
           costData: { score: 0, maxScore: 5, passed: false, label: 'Cost Data Confidence', detail: 'Route distance missing.' },
         },
@@ -245,12 +245,11 @@ class JourneyAnalyticsService {
       warnings.push(`Critical starting battery (${startingSOCPercent}% SOC). Immediate departure charging required.`);
     }
 
-    // Factor 2: Charging-Plan Segment Coverage (Max 25 pts)
+    // Factor 2: Charging-Plan Segment Coverage (Max 25 pts) - Evaluates SELECTED recommended stops sequentially
     let planScore = 25;
     let planPassed = true;
     let planDetail = 'Planned charging strategy provides full safe coverage across all route legs.';
     
-    // Evaluate segment distances
     const leg1UsableRange = Math.max(60, Math.round(effectivePlanningRangeKm * (startingSOCPercent / 100)));
     let currentPos = 0;
     let unallocatedDistance = false;
@@ -312,7 +311,7 @@ class JourneyAnalyticsService {
       warnings.push(`${safetyReservePercent}% safety reserve buffer is below 15% safety threshold.`);
     }
 
-    // Factor 4: Corridor Charger Coverage & Availability (Max 15 pts)
+    // Factor 4: Corridor Charger Coverage & Availability (Max 15 pts) - Density of compatible chargers along route
     let coverageScore = 15;
     let coveragePassed = true;
     let coverageDetail = 'Strong charging station density available along route corridor.';
@@ -331,13 +330,17 @@ class JourneyAnalyticsService {
       warnings.push('No compatible charging stations found along route corridor.');
     }
 
-    // Factor 5: Battery Health / SOH (Max 10 pts)
-    let sohScore = 10;
+    // Factor 5: Battery Health / SOH (Max 10 pts when real SOH exists; 0 pts when unavailable - NEVER FAKE 100%)
+    let sohScore = 0;
+    let sohMaxScore = 0;
     let sohPassed = true;
-    let sohDetail = 'Vehicle SOH data unavailable. Assuming nominal 100% battery state.';
+    let sohDetail = 'Vehicle Battery SOH telemetry unavailable. Omitted from calculation.';
 
     const realSoh = activeVehicle?.estimatedHealthSOH;
-    if (typeof realSoh === 'number' && realSoh > 0) {
+    const hasRealSoh = typeof realSoh === 'number' && realSoh > 0;
+
+    if (hasRealSoh) {
+      sohMaxScore = 10;
       if (realSoh >= 90) {
         sohScore = 10;
         sohDetail = `Battery State of Health (SOH) is optimal at ${realSoh}%.`;
@@ -373,10 +376,10 @@ class JourneyAnalyticsService {
       costDetail = 'Cost or toll rate data unavailable.';
     }
 
-    // Total Deterministic Score Calculation (0-100)
-    const totalScore = Math.max(0, Math.min(100,
-      batteryScore + planScore + reserveScore + coverageScore + sohScore + routeDataScore + costScore
-    ));
+    // Total Deterministic Score Calculation (Normalized to 100 active points)
+    const activeMaxPoints = hasRealSoh ? 100 : 90;
+    const rawEarnedPoints = batteryScore + planScore + reserveScore + coverageScore + (hasRealSoh ? sohScore : 0) + routeDataScore + costScore;
+    const totalScore = Math.max(0, Math.min(100, Math.round((rawEarnedPoints / activeMaxPoints) * 100)));
 
     // Determine Status
     let status: 'READY' | 'READY_WITH_ATTENTION' | 'REVIEW' | 'NOT_READY' | 'UNAVAILABLE' = 'READY';
@@ -385,7 +388,7 @@ class JourneyAnalyticsService {
     else if (totalScore >= 50) status = 'REVIEW';
     else status = 'NOT_READY';
 
-    // Determine Confidence
+    // Determine Confidence (Truthful)
     let confidence: 'HIGH' | 'PARTIAL' | 'LOW' = 'HIGH';
     if (costConfidenceState === 'HIGH_CONFIDENCE' && routeDataPassed) confidence = 'HIGH';
     else if (routeDataPassed) confidence = 'PARTIAL';
@@ -402,7 +405,7 @@ class JourneyAnalyticsService {
         chargingPlan: { score: planScore, maxScore: 25, passed: planPassed, label: 'Charging-Plan Coverage', detail: planDetail },
         safetyReserve: { score: reserveScore, maxScore: 15, passed: reservePassed, label: 'Safety Reserve', detail: reserveDetail },
         chargerCoverage: { score: coverageScore, maxScore: 15, passed: coveragePassed, label: 'Corridor Charger Coverage', detail: coverageDetail },
-        batteryHealth: { score: sohScore, maxScore: 10, passed: sohPassed, label: 'Battery Health (SOH)', detail: sohDetail },
+        batteryHealth: { score: sohScore, maxScore: sohMaxScore, passed: sohPassed, label: 'Battery Health (SOH)', detail: sohDetail },
         routeData: { score: routeDataScore, maxScore: 5, passed: routeDataPassed, label: 'Route Data Completeness', detail: routeDataDetail },
         costData: { score: costScore, maxScore: 5, passed: costPassed, label: 'Cost Data Confidence', detail: costDetail },
       },
