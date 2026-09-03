@@ -47,7 +47,7 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/ai" className="hover:text-teal-400 transition-colors text-sky-400 font-semibold">
+                <Link to="/volt-ai" className="hover:text-teal-400 transition-colors text-sky-400 font-semibold">
                   VoltAI Copilot
                 </Link>
               </li>

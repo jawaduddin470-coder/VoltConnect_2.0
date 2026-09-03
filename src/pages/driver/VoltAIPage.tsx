@@ -59,6 +59,28 @@ export const VoltAIPage: React.FC = () => {
     chargingDataService.getStations().then(setStations);
   }, []);
 
+  // Synchronize initial greeting text when authenticated user & vehicle context resolves
+  useEffect(() => {
+    if (user || activeVehicle) {
+      setCards(prev => {
+        if (prev.length > 0 && prev[0].id === 'init-1') {
+          return [
+            {
+              ...prev[0],
+              text: `Welcome ${user?.name || 'Driver'}! I am VoltAI, your contextual EV Copilot. Connected to your ${
+                activeVehicle
+                  ? `${activeVehicle.manufacturer} ${activeVehicle.model} (${activeVehicle.batteryCapacitykWh} kWh, ${activeVehicle.currentBatteryPercent || 85}% SOC, ${activeVehicle.connectorTypes.join(', ')})`
+                  : 'active EV'
+              }. Select an example query below or ask any question.`,
+            },
+            ...prev.slice(1),
+          ];
+        }
+        return prev;
+      });
+    }
+  }, [user, activeVehicle]);
+
   const handleQuery = async (queryText: string, typeHint?: 'charger' | 'trip' | 'health' | 'care') => {
     if (!queryText.trim()) return;
 

@@ -258,6 +258,26 @@ export const App: React.FC = () => {
             }
           />
           <Route
+            path="/ai"
+            element={
+              <ProtectedRoute allowedRoles={['driver']}>
+                <AppLayout>
+                  <VoltAIPage />
+                </AppLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/voltai"
+            element={
+              <ProtectedRoute allowedRoles={['driver']}>
+                <AppLayout>
+                  <VoltAIPage />
+                </AppLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/insight"
             element={
               <ProtectedRoute allowedRoles={['driver']}>

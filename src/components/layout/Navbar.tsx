@@ -78,7 +78,7 @@ export const Navbar: React.FC = () => {
     { path: '/explore', label: 'VoltMap', icon: MapPin },
     { path: '/trips', label: 'Trips', icon: Navigation },
     { path: '/garage', label: 'My EV', icon: Car, hasSubnav: true },
-    { path: '/ai', label: 'VoltAI', icon: Sparkles, isAI: true },
+    { path: '/volt-ai', label: 'VoltAI', icon: Sparkles, isAI: true },
   ];
 
   // My EV Subnav Links
