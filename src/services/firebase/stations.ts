@@ -1,22 +1,46 @@
 import { ChargingStation } from '@/types';
+import { signInAnonymously } from 'firebase/auth';
 import { getCollectionDocs, getDocument, setDocument, listenToCollection } from './firestore';
+import { firebaseAuth } from './config';
 import { normalizeStationData } from '../chargingDataService';
 
 const STATIONS_COLLECTION = 'stations';
 
 /**
  * Fetches all charging stations from the existing Cloud Firestore 'stations' collection.
+ * Auto-ensures anonymous authentication if unauthenticated to satisfy Firestore security rules.
  * Maintains complete read-compatibility with OpenChargeMap and partner datasets.
- * Does NOT overwrite or mutate existing database records.
  */
 export async function fetchFirestoreStations(): Promise<ChargingStation[]> {
   try {
+    // 1. Ensure Firebase Auth session exists for Firestore read security rules
+    if (!firebaseAuth.currentUser) {
+      try {
+        await signInAnonymously(firebaseAuth);
+        console.info('[Stations Service] Anonymous auth session established for Firestore read.');
+      } catch (authErr) {
+        console.warn('[Stations Service] Anonymous auth sign-in skipped/failed:', authErr);
+      }
+    }
+
     const docs = await getCollectionDocs<any>(STATIONS_COLLECTION);
     if (docs.length > 0) {
       return docs.map(normalizeStationData);
     }
-  } catch (error) {
-    console.warn('[Stations Service] Firestore read fallback to local dataset:', error);
+  } catch (error: any) {
+    console.warn('[Stations Service] Primary Firestore read error:', error?.message || error);
+    // 2. Retry with forced anonymous sign-in if initial fetch failed
+    try {
+      if (!firebaseAuth.currentUser) {
+        await signInAnonymously(firebaseAuth);
+      }
+      const retryDocs = await getCollectionDocs<any>(STATIONS_COLLECTION);
+      if (retryDocs.length > 0) {
+        return retryDocs.map(normalizeStationData);
+      }
+    } catch (retryErr) {
+      console.warn('[Stations Service] Retry Firestore read failed:', retryErr);
+    }
   }
   return [];
 }
