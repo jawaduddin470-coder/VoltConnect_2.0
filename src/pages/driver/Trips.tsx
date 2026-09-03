@@ -221,12 +221,13 @@ export const SmartTripPlanner: React.FC = () => {
         center: [20.5937, 78.9629],
         zoom: 5,
         zoomControl: false,
+        preferCanvas: true,
       });
 
       L.control.zoom({ position: 'topright' }).addTo(map);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 19,
       }).addTo(map);
 
@@ -236,30 +237,55 @@ export const SmartTripPlanner: React.FC = () => {
       map.on('dragstart', () => {
         setFollowMe(false);
       });
+
+      // Immediate and delayed size invalidation for Chromium container reflow
+      map.invalidateSize();
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 150);
     }
 
     const map = mapInstanceRef.current;
     const stopGroup = stopMarkersRef.current;
 
+    // Attach ResizeObserver to container element to ensure rendering in Chrome, Safari & Edge
+    const resizeObserver = new ResizeObserver(() => {
+      if (map) {
+        map.invalidateSize();
+      }
+    });
+
+    if (mapContainerRef.current) {
+      resizeObserver.observe(mapContainerRef.current);
+    }
+
     if (tripPlan && map && stopGroup) {
       stopGroup.clearLayers();
+
+      // Ensure Leaflet has valid canvas dimensions before fitting polyline bounds
+      map.invalidateSize();
 
       // Render Real Road Route Polyline Line
       if (routePolylineRef.current) {
         routePolylineRef.current.remove();
       }
 
-      const polyline = L.polyline(tripPlan.routeGeometry, {
-        color: '#0EA5E9',
-        weight: 5,
-        opacity: 0.85,
-        lineCap: 'round',
-        lineJoin: 'round',
-      }).addTo(map);
-      routePolylineRef.current = polyline;
+      if (tripPlan.routeGeometry && tripPlan.routeGeometry.length > 0) {
+        const polyline = L.polyline(tripPlan.routeGeometry, {
+          color: '#0EA5E9',
+          weight: 5,
+          opacity: 0.85,
+          lineCap: 'round',
+          lineJoin: 'round',
+        }).addTo(map);
+        routePolylineRef.current = polyline;
 
-      // Fit map view to complete route bounds
-      map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+        // Fit map view to complete route bounds safely
+        const bounds = polyline.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [50, 50] });
+        }
+      }
 
       // High-Contrast Map Origin & Destination Markers (DARK NAVY TEXT ON SOLID WHITE BACKGROUND)
       tripPlan.waypoints.forEach((wp, idx) => {
@@ -371,6 +397,10 @@ export const SmartTripPlanner: React.FC = () => {
         stopGroup.addLayer(marker);
       });
     }
+
+    return () => {
+      resizeObserver.disconnect();
+    };
   }, [tripPlan]);
 
   // Live GPS User Location Marker & Route Deviation Check
