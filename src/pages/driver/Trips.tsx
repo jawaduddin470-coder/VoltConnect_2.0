@@ -5,12 +5,14 @@ import { useUserLocation } from '@/hooks/useUserLocation';
 import { chargingDataService } from '@/services/chargingDataService';
 import { geocodingService, GeocodedLocation } from '@/services/geocodingService';
 import { routingService, RouteWaypointInput, RouteResult } from '@/services/routingService';
-import { tripPlanningEngine, EVTripPlan, RecommendedChargingStop } from '@/services/tripPlanningEngine';
+import { tripPlanningEngine, EVTripPlan, RecommendedChargingStop, PlanBRecoveryResult } from '@/services/tripPlanningEngine';
+import { journeyAnalyticsService } from '@/services/journeyAnalyticsService';
 import { checkStationCompatibility } from '@/features/charging/utils/compatibility';
 import { EVVehicleSelector } from '@/components/common/EVVehicleSelector';
 import { TripMap } from '@/features/charging/components/TripMap';
 import { TollAnalyticsModal } from '@/features/charging/components/TollAnalyticsModal';
 import { ReadinessDetailsModal } from '@/features/charging/components/ReadinessDetailsModal';
+import { PlanBRecoveryCard } from '@/features/charging/components/PlanBRecoveryCard';
 import { ChargingStation } from '@/types';
 import {
   Navigation,
@@ -98,6 +100,10 @@ export const SmartTripPlanner: React.FC = () => {
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
   const [showReadinessModal, setShowReadinessModal] = useState(false);
 
+  // Phase 4: Plan B Recovery State
+  const [isAnalyzingPlanB, setIsAnalyzingPlanB] = useState(false);
+  const [planBResult, setPlanBResult] = useState<PlanBRecoveryResult | null>(null);
+
   // Score Count-Up Animation State
   const [animatedScore, setAnimatedScore] = useState(0);
 
@@ -118,6 +124,7 @@ export const SmartTripPlanner: React.FC = () => {
     if (waypoints.length < 2) return;
     setIsPlanning(true);
     setPlanError(null);
+    setPlanBResult(null);
 
     try {
       // Always ensure full station dataset is loaded
@@ -150,6 +157,59 @@ export const SmartTripPlanner: React.FC = () => {
     } finally {
       setIsPlanning(false);
     }
+  };
+
+  // Phase 4: Handle Plan B Alternate Charging Recovery Analysis
+  const handleAnalyzePlanB = () => {
+    if (!tripPlan) return;
+    setIsAnalyzingPlanB(true);
+
+    setTimeout(() => {
+      const res = tripPlanningEngine.calculatePlanBAlternateStops(tripPlan, activeVehicle, stations);
+      setPlanBResult(res);
+      setIsAnalyzingPlanB(false);
+    }, 300);
+  };
+
+  // Phase 4: Apply Validated Plan B Alternate Charging Plan
+  const handleApplyPlanB = () => {
+    if (!tripPlan || !planBResult || !planBResult.success) return;
+
+    const alternateStops = planBResult.alternateStops;
+    const startingSOCPercent = activeVehicle?.currentBatteryPercent ?? 85;
+
+    // Recalculate financial costs & readiness using Plan B stops
+    const costSummary = journeyAnalyticsService.computeJourneyCosts(
+      alternateStops,
+      tripPlan.tollSummary.totalTollCostINR,
+      tripPlan.totalRoadDistanceKm,
+      activeVehicle,
+      tripPlan.tollSummary.matchedPlazas
+    );
+
+    const readinessScore = journeyAnalyticsService.computeJourneyReadiness(
+      startingSOCPercent,
+      safetyReservePercent,
+      tripPlan.totalRoadDistanceKm,
+      tripPlan.effectivePlanningRangeKm,
+      alternateStops,
+      activeVehicle,
+      tripPlan.otherCompatibleStations.length,
+      costSummary.dataConfidence
+    );
+
+    setTripPlan({
+      ...tripPlan,
+      recommendedStops: alternateStops,
+      costSummary,
+      readinessScore,
+    });
+
+    if (alternateStops.length > 0) {
+      setSelectedStop(alternateStops[0]);
+    }
+
+    setPlanBResult(null);
   };
 
   // Fetch Firestore Charging Station Dataset on mount
@@ -858,6 +918,16 @@ export const SmartTripPlanner: React.FC = () => {
                 </button>
               </div>
             )}
+
+            {/* Phase 4: Plan B Alternate Charging Recovery Card */}
+            <PlanBRecoveryCard
+              isAnalyzing={isAnalyzingPlanB}
+              recoveryResult={planBResult}
+              onAnalyze={handleAnalyzePlanB}
+              onApplyPlanB={handleApplyPlanB}
+              onKeepCurrentPlan={() => setPlanBResult(null)}
+              primaryPlanHasGap={tripPlan.readinessScore?.status !== 'READY'}
+            />
 
             {/* Tab Selector: Recommended vs Other Compatible Route Chargers */}
             <div className="space-y-2">
