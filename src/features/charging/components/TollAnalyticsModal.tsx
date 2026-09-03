@@ -1,6 +1,6 @@
 import React from 'react';
 import { EVTripPlan } from '@/services/tripPlanningEngine';
-import { X, ShieldCheck, Zap, Fuel, Sparkles, CheckCircle2, AlertTriangle, ChevronRight } from 'lucide-react';
+import { X, Zap, Fuel, Sparkles, CheckCircle2, AlertTriangle, ChevronRight, Receipt } from 'lucide-react';
 
 interface TollAnalyticsModalProps {
   tripPlan: EVTripPlan;
@@ -8,7 +8,7 @@ interface TollAnalyticsModalProps {
 }
 
 export const TollAnalyticsModal: React.FC<TollAnalyticsModalProps> = ({ tripPlan, onClose }) => {
-  const { tollSummary, costSummary, readinessScore, waypoints, totalRoadDistanceKm } = tripPlan;
+  const { tollSummary, costSummary, waypoints, totalRoadDistanceKm } = tripPlan;
 
   const originName = waypoints[0]?.name.split(',')[0] || 'Origin';
   const destName = waypoints[waypoints.length - 1]?.name.split(',')[0] || 'Destination';
@@ -22,10 +22,10 @@ export const TollAnalyticsModal: React.FC<TollAnalyticsModalProps> = ({ tripPlan
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-extrabold uppercase text-sky-400 font-mono tracking-wider">
-                JOURNEY ANALYTICS & TOLL INTELLIGENCE
+                ROUTE TOLL INTELLIGENCE & JOURNEY COST
               </span>
-              <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-extrabold text-[10px] border border-emerald-500/30">
-                ✓ VERIFIED
+              <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-extrabold text-[10px] border border-amber-500/30">
+                FASTag Enabled
               </span>
             </div>
             <h2 className="font-heading text-lg font-extrabold text-white mt-1">
@@ -44,50 +44,7 @@ export const TollAnalyticsModal: React.FC<TollAnalyticsModalProps> = ({ tripPlan
         {/* Modal Body - Scrollable */}
         <div className="p-6 overflow-y-auto space-y-6 text-slate-900 font-sans">
           
-          {/* Section 1: Journey Readiness Score Card */}
-          <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-850 to-slate-950 text-white space-y-3 shadow-lg border border-slate-800">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className={`p-2 rounded-xl ${
-                  readinessScore.score >= 85 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                }`}>
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-heading font-extrabold text-sm text-white tracking-wide">
-                    {readinessScore.headline}
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">{readinessScore.subhead}</p>
-                </div>
-              </div>
-
-              <div className="text-right">
-                <div className="font-mono text-2xl font-black text-emerald-400">
-                  {readinessScore.score}<span className="text-xs text-slate-400 font-normal"> / 100</span>
-                </div>
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">READINESS INDEX</span>
-              </div>
-            </div>
-
-            {/* Readiness Factor Indicators */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-800 text-xs">
-              {readinessScore.factors.map((factor, idx) => (
-                <div key={idx} className="flex items-start gap-2 bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50">
-                  {factor.passed ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  )}
-                  <div>
-                    <span className="font-extrabold text-slate-200 block">{factor.label}</span>
-                    <span className="text-[11px] text-slate-400 leading-tight block">{factor.detail}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Section 2: Complete Journey Cost Breakdown & Split Bar */}
+          {/* Section 1: Complete Journey Cost Breakdown & Split Bar */}
           <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 shadow-xs">
             <div className="flex items-center justify-between">
               <div>
@@ -111,10 +68,10 @@ export const TollAnalyticsModal: React.FC<TollAnalyticsModalProps> = ({ tripPlan
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-mono font-bold">
                 <span className="text-sky-600 flex items-center gap-1">
-                  ⚡ DC Fast Charging: ₹{costSummary.estimatedChargingCostINR.toLocaleString('en-IN')} ({costSummary.chargingCostPercent}%)
+                  ⚡ Charging: ₹{costSummary.estimatedChargingCostINR.toLocaleString('en-IN')} ({costSummary.chargingCostPercent}%)
                 </span>
                 <span className="text-amber-600 flex items-center gap-1">
-                  🛣️ FASTag Tolls: ₹{costSummary.estimatedTollCostINR.toLocaleString('en-IN')} ({costSummary.tollCostPercent}%)
+                  🛣️ Tolls: ₹{costSummary.estimatedTollCostINR.toLocaleString('en-IN')} ({costSummary.tollCostPercent}%)
                 </span>
               </div>
 
@@ -154,7 +111,7 @@ export const TollAnalyticsModal: React.FC<TollAnalyticsModalProps> = ({ tripPlan
             </div>
           </div>
 
-          {/* Section 3: Detailed Route Toll Plazas List */}
+          {/* Section 2: Detailed Route Toll Plazas List in Journey Sequence */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -170,7 +127,7 @@ export const TollAnalyticsModal: React.FC<TollAnalyticsModalProps> = ({ tripPlan
               </span>
             </div>
 
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 leading-relaxed">
               {tollSummary.dataAttributionMessage}
             </p>
 
@@ -179,22 +136,22 @@ export const TollAnalyticsModal: React.FC<TollAnalyticsModalProps> = ({ tripPlan
                 No FASTag highway tolls detected on this route segment.
               </div>
             ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {tollSummary.matchedPlazas.map((item, idx) => (
                   <div
                     key={item.plaza.id}
-                    className="p-3 rounded-2xl bg-white border border-slate-200 flex items-center justify-between text-xs hover:border-sky-300 transition-colors"
+                    className="p-3 rounded-2xl bg-white border border-slate-200 flex items-center justify-between text-xs hover:border-amber-400 transition-colors shadow-2xs"
                   >
                     <div className="flex items-center gap-3 truncate">
-                      <span className="w-6 h-6 rounded-full bg-slate-900 text-white font-mono text-[10px] font-extrabold flex items-center justify-center shrink-0">
-                        {idx + 1}
+                      <span className="w-6 h-6 rounded-full bg-amber-500 text-white font-mono text-[10px] font-extrabold flex items-center justify-center shrink-0">
+                        {String(idx + 1).padStart(2, '0')}
                       </span>
                       <div className="truncate">
                         <div className="font-extrabold text-slate-900 truncate">
                           {item.plaza.name}
                         </div>
                         <div className="text-[10px] font-mono text-slate-500">
-                          {item.plaza.highway} • {item.plaza.state} • ~{item.distanceFromOriginKm} km from start
+                          {item.plaza.highway} • {item.plaza.state} • ~{item.distanceFromOriginKm} km from origin
                         </div>
                       </div>
                     </div>
@@ -203,7 +160,7 @@ export const TollAnalyticsModal: React.FC<TollAnalyticsModalProps> = ({ tripPlan
                       <span className="font-mono font-extrabold text-slate-900 text-xs">
                         ₹{item.plaza.carTollFeeINR}
                       </span>
-                      <span className="text-[9px] text-emerald-600 block font-mono font-bold">
+                      <span className="text-[9px] text-amber-600 block font-mono font-bold">
                         FASTag
                       </span>
                     </div>
@@ -217,7 +174,7 @@ export const TollAnalyticsModal: React.FC<TollAnalyticsModalProps> = ({ tripPlan
 
         {/* Modal Footer */}
         <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex items-center justify-between text-xs text-slate-500">
-          <span>FASTag & DC Fast Charge rates estimated for Indian National Highway network</span>
+          <span>FASTag 4-Wheeler LMV rates derived from NHAI FASTag database</span>
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-extrabold text-xs cursor-pointer"

@@ -12,6 +12,8 @@ interface TripMapProps {
   accuracy?: number | null;
   followMe?: boolean;
   onDisableFollowMe?: () => void;
+  showTolls?: boolean;
+  showChargers?: boolean;
 }
 
 export const TripMap: React.FC<TripMapProps> = ({
@@ -24,10 +26,13 @@ export const TripMap: React.FC<TripMapProps> = ({
   accuracy,
   followMe,
   onDisableFollowMe,
+  showTolls = true,
+  showChargers = true,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const stopMarkersRef = useRef<L.LayerGroup | null>(null);
+  const tollMarkersRef = useRef<L.LayerGroup | null>(null);
   const routePolylineRef = useRef<L.Polyline | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
@@ -52,7 +57,10 @@ export const TripMap: React.FC<TripMapProps> = ({
     }).addTo(map);
 
     const stopGroup = L.layerGroup().addTo(map);
+    const tollGroup = L.layerGroup().addTo(map);
+    
     stopMarkersRef.current = stopGroup;
+    tollMarkersRef.current = tollGroup;
     mapInstanceRef.current = map;
 
     map.on('dragstart', () => {
@@ -94,14 +102,16 @@ export const TripMap: React.FC<TripMapProps> = ({
     };
   }, []);
 
-  // Effect 2: Update Route Geometry, Bounds, and Corridor Station Markers
+  // Effect 2: Update Route Geometry, Bounds, Charging Station Markers, and Toll Plaza Markers
   useEffect(() => {
     const map = mapInstanceRef.current;
     const stopGroup = stopMarkersRef.current;
+    const tollGroup = tollMarkersRef.current;
 
-    if (!map || !stopGroup || !tripPlan) return;
+    if (!map || !stopGroup || !tollGroup || !tripPlan) return;
 
     stopGroup.clearLayers();
+    tollGroup.clearLayers();
 
     // Render Real Road Route Polyline Line
     if (routePolylineRef.current) {
@@ -185,70 +195,131 @@ export const TripMap: React.FC<TripMapProps> = ({
       L.marker([wp.latitude, wp.longitude], { icon: pinIcon }).addTo(stopGroup);
     });
 
-    // Render Numbered Recommended Charging Markers (⚡ 1, ⚡ 2, ⚡ 3)
-    tripPlan.recommendedStops.forEach((stop, idx) => {
-      const stopIcon = L.divIcon({
-        className: 'custom-charging-stop-rec',
-        html: `
-          <div style="
-            width: 36px;
-            height: 36px;
-            background: linear-gradient(135deg, #0EA5E9 0%, #0F172A 100%);
-            border: 2.5px solid #38BDF8;
-            border-radius: 50%;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 800;
-            font-size: 11px;
-            box-shadow: 0 4px 14px rgba(14,165,233,0.6);
-            cursor: pointer;
-          ">
-            ⚡${idx + 1}
-          </div>
-        `,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
+    // Render Charging Station Markers (If showChargers is ON)
+    if (showChargers) {
+      // Render Numbered Recommended Charging Markers (⚡ 1, ⚡ 2, ⚡ 3)
+      tripPlan.recommendedStops.forEach((stop, idx) => {
+        const stopIcon = L.divIcon({
+          className: 'custom-charging-stop-rec',
+          html: `
+            <div style="
+              width: 36px;
+              height: 36px;
+              background: linear-gradient(135deg, #0EA5E9 0%, #0F172A 100%);
+              border: 2.5px solid #38BDF8;
+              border-radius: 50%;
+              color: white;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: 800;
+              font-size: 11px;
+              box-shadow: 0 4px 14px rgba(14,165,233,0.6);
+              cursor: pointer;
+            ">
+              ⚡${idx + 1}
+            </div>
+          `,
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
+        });
+
+        const marker = L.marker([stop.station.latitude, stop.station.longitude], { icon: stopIcon });
+        marker.on('click', () => onSelectStop(stop));
+        stopGroup.addLayer(marker);
       });
 
-      const marker = L.marker([stop.station.latitude, stop.station.longitude], { icon: stopIcon });
-      marker.on('click', () => onSelectStop(stop));
-      stopGroup.addLayer(marker);
-    });
+      // Render Other Compatible Route Charging Markers (⚡)
+      tripPlan.otherCompatibleStations.forEach((stop) => {
+        const otherIcon = L.divIcon({
+          className: 'custom-charging-stop-other',
+          html: `
+            <div style="
+              width: 28px;
+              height: 28px;
+              background: #1E293B;
+              border: 2px solid #38BDF8;
+              border-radius: 50%;
+              color: #38BDF8;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: 800;
+              font-size: 10px;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+              cursor: pointer;
+            ">
+              ⚡
+            </div>
+          `,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        });
 
-    // Render Other Compatible Route Charging Markers (⚡)
-    tripPlan.otherCompatibleStations.forEach((stop) => {
-      const otherIcon = L.divIcon({
-        className: 'custom-charging-stop-other',
-        html: `
-          <div style="
-            width: 28px;
-            height: 28px;
-            background: #1E293B;
-            border: 2px solid #38BDF8;
-            border-radius: 50%;
-            color: #38BDF8;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 800;
-            font-size: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-            cursor: pointer;
-          ">
-            ⚡
-          </div>
-        `,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
+        const marker = L.marker([stop.station.latitude, stop.station.longitude], { icon: otherIcon });
+        marker.on('click', () => onSelectStop(stop));
+        stopGroup.addLayer(marker);
       });
+    }
 
-      const marker = L.marker([stop.station.latitude, stop.station.longitude], { icon: otherIcon });
-      marker.on('click', () => onSelectStop(stop));
-      stopGroup.addLayer(marker);
-    });
-  }, [tripPlan, onSelectStop]);
+    // Render Route-Specific Toll Plaza Markers (If showTolls is ON & matched plazas exist)
+    if (showTolls && tripPlan.tollSummary && tripPlan.tollSummary.matchedPlazas.length > 0) {
+      tripPlan.tollSummary.matchedPlazas.forEach(item => {
+        const tollIcon = L.divIcon({
+          className: 'custom-toll-plaza-marker',
+          html: `
+            <div style="
+              width: 26px;
+              height: 26px;
+              background: #F59E0B;
+              border: 2.5px solid #FFFFFF;
+              border-radius: 50%;
+              color: white;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 11px;
+              box-shadow: 0 3px 10px rgba(245, 158, 11, 0.5);
+              cursor: pointer;
+              transition: transform 0.2s ease;
+            ">
+              🛣️
+            </div>
+          `,
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+        });
+
+        const marker = L.marker([item.plaza.latitude, item.plaza.longitude], { icon: tollIcon });
+        
+        // Compact Leaflet Popup on click
+        const popupContent = `
+          <div style="font-family: system-ui, -apple-system, sans-serif; padding: 4px; color: #0F172A; min-width: 170px;">
+            <div style="font-size: 9px; font-weight: 900; color: #D97706; text-transform: uppercase; letter-spacing: 0.5px;">
+              🛣️ FASTag Toll Plaza
+            </div>
+            <div style="font-size: 13px; font-weight: 900; color: #0F172A; margin-top: 2px; line-height: 1.2;">
+              ${item.plaza.name}
+            </div>
+            <div style="font-size: 10px; font-weight: 700; color: #64748B; margin-top: 3px;">
+              ${item.plaza.highway} • ${item.plaza.state}
+            </div>
+            <div style="margin-top: 8px; padding-top: 6px; border-t: 1px solid #E2E8F0; display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 12px; font-weight: 900; color: #0F172A; font-family: monospace;">
+                ₹${item.plaza.carTollFeeINR}
+              </span>
+              <span style="font-size: 9px; color: #059669; font-weight: 800; background: #ECFDF5; padding: 2px 6px; border-radius: 4px;">
+                ✓ On Planned Route
+              </span>
+            </div>
+          </div>
+        `;
+
+        marker.bindPopup(popupContent, { offset: [0, -10] });
+        tollGroup.addLayer(marker);
+      });
+    }
+  }, [tripPlan, onSelectStop, showTolls, showChargers]);
 
   // Effect 3: Render Live User Location Marker & Accuracy Radius
   useEffect(() => {

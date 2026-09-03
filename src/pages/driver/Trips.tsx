@@ -37,6 +37,7 @@ import {
   Battery,
   ChevronRight,
   Receipt,
+  Layers,
 } from 'lucide-react';
 
 export const SmartTripPlanner: React.FC = () => {
@@ -95,6 +96,10 @@ export const SmartTripPlanner: React.FC = () => {
   // Progressive Disclosure Modal State for Toll & Cost Analytics
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
 
+  // Map Layer Controls (Charging Stations & Toll Plazas Toggles)
+  const [showChargersOnMap, setShowChargersOnMap] = useState(true);
+  const [showTollsOnMap, setShowTollsOnMap] = useState(true);
+
   // Live Route Tracking State (Honest Labeling - NO fake turn-by-turn navigation)
   const [isLiveTracking, setIsLiveTracking] = useState(false);
   const [followMe, setFollowMe] = useState(true);
@@ -120,7 +125,7 @@ export const SmartTripPlanner: React.FC = () => {
       // 1. Calculate Real Road Route geometry & road distance via OSRM Driving Engine
       const routeResult = await routingService.calculateRoadRoute(waypoints);
 
-      // 2. Compute Usable Planning Range, Starting SOC & Corridor Charging Candidates from Firestore
+      // 2. Compute Usable Planning Range, Starting SOC & Corridor Charging Candidates from Firestore + Tolls
       const plan = tripPlanningEngine.planEVJourney(
         routeResult,
         activeVehicle,
@@ -612,6 +617,8 @@ export const SmartTripPlanner: React.FC = () => {
             accuracy={accuracy}
             followMe={followMe}
             onDisableFollowMe={() => setFollowMe(false)}
+            showChargers={showChargersOnMap}
+            showTolls={showTollsOnMap}
           />
 
           {/* Route Deviation Warning Banner */}
@@ -630,8 +637,8 @@ export const SmartTripPlanner: React.FC = () => {
             </div>
           )}
 
-          {/* Floating Action Controls */}
-          <div className="absolute top-4 right-14 z-20 flex flex-col gap-2">
+          {/* Top-Right Floating Controls (Map Layer Toggles & Live Tracking) */}
+          <div className="absolute top-4 right-14 z-20 flex flex-col items-end gap-2">
             <button
               onClick={() => {
                 setIsLiveTracking(!isLiveTracking);
@@ -646,6 +653,31 @@ export const SmartTripPlanner: React.FC = () => {
               <Radio className={`w-4 h-4 ${isLiveTracking ? 'animate-pulse' : ''}`} />
               <span>{isLiveTracking ? 'LIVE ROUTE TRACKING ACTIVE' : 'Start Live Route Tracking'}</span>
             </button>
+
+            {/* Map Layer Toggle Toolbar: Chargers & Tolls */}
+            <div className="bg-white/95 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 shadow-xl flex items-center gap-1 text-xs font-extrabold">
+              <button
+                onClick={() => setShowChargersOnMap(!showChargersOnMap)}
+                className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  showChargersOnMap
+                    ? 'bg-sky-500 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span>⚡ Chargers</span>
+              </button>
+
+              <button
+                onClick={() => setShowTollsOnMap(!showTollsOnMap)}
+                className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                  showTollsOnMap
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span>🛣️ Tolls ({tripPlan.tollSummary.tollPlazaCount})</span>
+              </button>
+            </div>
           </div>
 
           {/* Left Floating Trip Plan Summary Drawer */}
@@ -667,19 +699,6 @@ export const SmartTripPlanner: React.FC = () => {
               >
                 <Edit2 className="w-4 h-4" />
               </button>
-            </div>
-
-            {/* Subtle Journey Readiness Score Badge */}
-            <div className="p-3 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-950 text-white flex items-center justify-between shadow-xs border border-slate-800">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="text-xs font-extrabold tracking-wide text-slate-100">
-                  {tripPlan.readinessScore.headline}
-                </span>
-              </div>
-              <span className="font-mono text-xs font-extrabold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                {tripPlan.readinessScore.score}/100
-              </span>
             </div>
 
             {/* Compact Journey Cost Breakdown & Split Bar */}
@@ -717,7 +736,7 @@ export const SmartTripPlanner: React.FC = () => {
               >
                 <div className="flex items-center gap-1.5">
                   <Receipt className="w-3.5 h-3.5 text-sky-600" />
-                  <span>View Cost & Toll Details</span>
+                  <span>View Journey Breakdown</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </button>
