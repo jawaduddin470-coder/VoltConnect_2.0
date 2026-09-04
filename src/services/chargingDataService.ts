@@ -196,6 +196,59 @@ class ChargingDataService {
     }
     return false;
   }
+
+  /**
+   * Updates an existing station's details and tariff rates.
+   * Modifies local cache and persists to Firestore partner stations.
+   */
+  async updateStation(stationId: string, updates: Partial<ChargingStation>): Promise<ChargingStation | null> {
+    if (!this.cache) {
+      await this.getStations();
+    }
+    const idx = this.cache ? this.cache.findIndex(s => s.id === stationId) : -1;
+    if (idx !== -1 && this.cache) {
+      const updated = {
+        ...this.cache[idx],
+        ...updates,
+        lastUpdated: 'Just now',
+      };
+      this.cache[idx] = updated;
+
+      // Asynchronously attempt to persist to Firestore
+      try {
+        const { savePartnerStation } = await import('./firebase/stations');
+        await savePartnerStation(updated);
+      } catch (e) {
+        console.warn('[ChargingDataService] Firestore station update fallback to local:', e);
+      }
+
+      return updated;
+    }
+    return null;
+  }
+
+  /**
+   * Updates the per-kWh tariff and optional power rating for a station.
+   */
+  async updateStationTariff(stationId: string, tariffPerKWh: number, powerKW?: number): Promise<boolean> {
+    if (!this.cache) await this.getStations();
+    const st = this.cache?.find(s => s.id === stationId);
+    if (!st) return false;
+
+    const updatedChargers = st.chargers.map(chg => ({
+      ...chg,
+      pricingPerKWh: tariffPerKWh,
+      hasVerifiedPricing: true,
+      pricingDisplay: `₹${tariffPerKWh} / kWh`,
+      powerKW: powerKW !== undefined ? powerKW : chg.powerKW,
+      lastUpdated: 'Just now',
+    }));
+
+    await this.updateStation(stationId, {
+      chargers: updatedChargers,
+    });
+    return true;
+  }
 }
 
 export const chargingDataService = new ChargingDataService();

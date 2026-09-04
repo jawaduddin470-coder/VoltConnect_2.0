@@ -32,8 +32,8 @@ export const VoltConnectIntro: React.FC<VoltConnectIntroProps> = ({
   const pausedTimeRef = useRef<number>(0);
   const lastTimestampRef = useRef<number>(0);
 
-  // Total cinematic timeline duration: 12.0 seconds for optimal storytelling pacing
-  const TOTAL_DURATION_MS = 12000;
+  // Total cinematic timeline duration: 11.0 seconds for optimal storytelling pacing
+  const TOTAL_DURATION_MS = 11000;
 
   // Initialize intro visibility based on first-time visit, URL debug params, or forced replay
   useEffect(() => {

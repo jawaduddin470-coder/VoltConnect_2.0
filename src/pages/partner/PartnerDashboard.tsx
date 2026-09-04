@@ -46,6 +46,54 @@ export const PartnerDashboard: React.FC = () => {
 
   // Editing Station State
   const [editingStation, setEditingStation] = useState<ChargingStation | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editTariff, setEditTariff] = useState(18);
+  const [editPower, setEditPower] = useState(60);
+  const [editHours, setEditHours] = useState('24/7 Open');
+
+  const handleOpenEdit = (st: ChargingStation) => {
+    setEditingStation(st);
+    setEditName(st.name);
+    setEditTariff(st.chargers[0]?.pricingPerKWh || 18);
+    setEditPower(st.chargers[0]?.powerKW || 60);
+    setEditHours(st.operatingHours || '24/7 Open');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStation || !user) return;
+
+    const prevTariff = editingStation.chargers[0]?.pricingPerKWh || 18;
+    await chargingDataService.updateStationTariff(editingStation.id, editTariff, editPower);
+    const updatedStation = await chargingDataService.updateStation(editingStation.id, {
+      name: editName,
+      operatingHours: editHours,
+      is24x7: editHours.includes('24/7'),
+    });
+
+    if (updatedStation) {
+      setPartnerStations(prev => prev.map(s => (s.id === updatedStation.id ? updatedStation : s)));
+    }
+
+    operationsService.logAuditEvent(
+      user.uid,
+      user.email,
+      'partner',
+      'PARTNER_TARIFF_UPDATE',
+      'stations',
+      editingStation.id,
+      {
+        stationName: editName,
+        oldTariff: prevTariff,
+        newTariff: editTariff,
+        powerKW: editPower,
+      },
+      prevTariff,
+      editTariff
+    );
+
+    setEditingStation(null);
+  };
 
   useEffect(() => {
     chargingDataService.getStations().then(data => {
@@ -262,7 +310,7 @@ export const PartnerDashboard: React.FC = () => {
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <button
-                          onClick={() => setEditingStation(st)}
+                          onClick={() => handleOpenEdit(st)}
                           className="vc-btn vc-btn-ghost py-1 px-3 text-[11px] font-bold text-sky-600 hover:bg-sky-50"
                         >
                           Edit Details
@@ -504,6 +552,97 @@ export const PartnerDashboard: React.FC = () => {
                     <Send className="w-3.5 h-3.5" /> Submit for Admin Verification
                   </button>
                 )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT STATION & TARIFF MODAL */}
+      {editingStation && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[10px] font-bold text-sky-600 uppercase tracking-wider">CPO Station Configuration</span>
+                <h3 className="font-heading font-extrabold text-lg text-navy-900">Edit Station & Tariff</h3>
+              </div>
+              <button onClick={() => setEditingStation(null)} className="p-1 text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs font-bold">
+              <div className="space-y-1">
+                <label className="text-slate-700">Station Name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-slate-700">Tariff (₹ / kWh)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    max="100"
+                    value={editTariff}
+                    onChange={e => setEditTariff(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-sky-300 font-bold text-sky-700 focus:ring-2 focus:ring-sky-500"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-700">Max Power (kW)</label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="7"
+                    max="350"
+                    value={editPower}
+                    onChange={e => setEditPower(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-700">Operating Schedule</label>
+                <input
+                  type="text"
+                  value={editHours}
+                  onChange={e => setEditHours(e.target.value)}
+                  placeholder="e.g. 24/7 Open"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                />
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 font-normal">
+                Updating tariff rate updates live calculation for all drivers routing through this station on VoltTrip.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingStation(null)}
+                  className="vc-btn vc-btn-ghost text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="vc-btn vc-btn-teal text-xs font-bold flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" /> Save Tariff & Details
+                </button>
               </div>
             </form>
           </div>
