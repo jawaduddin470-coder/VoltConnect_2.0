@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LogoCompact } from '@/assets/LogoCompact';
 import { VoltConnectLogo } from '@/components/common/VoltConnectLogo';
+import { VoiceNavigationControl } from '@/components/voice/VoiceNavigationControl';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   Compass,
@@ -211,6 +212,9 @@ export const Navbar: React.FC = () => {
           {/* Right Controls */}
           <div className="flex items-center gap-2 sm:gap-3">
             
+            {/* Intelligent Voice Navigation Control */}
+            <VoiceNavigationControl />
+
             {user ? (
               // AUTHENTICATED RIGHT CONTROLS
               <>

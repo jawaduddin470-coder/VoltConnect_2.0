@@ -23,6 +23,8 @@ import {
   DollarSign,
   MapPin,
   Battery,
+  Mic,
+  MicOff,
 } from 'lucide-react';
 
 interface CopilotCard {
@@ -328,7 +330,7 @@ export const VoltAIPage: React.FC = () => {
           e.preventDefault();
           handleQuery(inputQuery);
         }}
-        className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-md"
+        className="flex items-center gap-2 sm:gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-md"
       >
         <input
           type="text"
@@ -337,6 +339,39 @@ export const VoltAIPage: React.FC = () => {
           placeholder="Ask VoltAI: 'Where should I charge?' or 'Can I reach Vijayawada?'..."
           className="flex-1 px-4 py-2.5 text-xs font-semibold text-navy-900 focus:outline-none bg-transparent"
         />
+
+        {/* Voice Dictation Button */}
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window === 'undefined') return;
+            const SpeechAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+            if (!SpeechAPI) {
+              alert('Speech recognition is not supported in this browser.');
+              return;
+            }
+            try {
+              const rec = new SpeechAPI();
+              rec.lang = 'en-US';
+              rec.interimResults = false;
+              rec.maxAlternatives = 1;
+              rec.onresult = (evt: any) => {
+                const text = evt.results?.[0]?.[0]?.transcript || '';
+                if (text) {
+                  setInputQuery(text);
+                  handleQuery(text);
+                }
+              };
+              rec.start();
+            } catch (err) {
+              console.warn('[VoltAI Voice] Voice dictation start error:', err);
+            }
+          }}
+          className="p-2.5 rounded-xl text-slate-500 hover:text-sky-600 hover:bg-sky-50 border border-slate-200 transition-colors"
+          title="Voice Ask"
+        >
+          <Mic className="w-4 h-4" />
+        </button>
 
         <button
           type="submit"
