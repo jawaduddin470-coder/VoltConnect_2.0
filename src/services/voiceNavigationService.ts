@@ -3,6 +3,8 @@
  * Centralized intent detection, transcript normalization, and route command matching.
  */
 
+import { parseVoiceAction, VoiceActionResult, VoiceActionIntent, ExtractedParameters, voiceContextStore } from './voiceActionEngine';
+
 export interface VoiceRouteDefinition {
   id: string;
   path: string;
@@ -14,13 +16,19 @@ export interface VoiceRouteDefinition {
 
 export interface VoiceCommandMatch {
   matched: boolean;
-  intent: 'NAVIGATE' | 'GO_BACK' | 'UNKNOWN';
+  intent: 'NAVIGATE' | 'GO_BACK' | 'ACTION' | 'UNKNOWN';
+  actionIntent?: VoiceActionIntent;
   targetRoute?: string;
   targetLabel?: string;
   confidence: number;
   rawTranscript: string;
   normalizedTranscript: string;
   matchedKeyword?: string;
+  parameters?: ExtractedParameters;
+  feedbackTitle?: string;
+  feedbackMessage?: string;
+  navigationState?: Record<string, any>;
+  contextApplied?: boolean;
 }
 
 // Complete Master Route Mapping for VoltConnect 2.0
@@ -315,39 +323,75 @@ export function normalizeVoiceTranscript(rawText: string): string {
  * Resolves a normalized speech transcript into a structured navigation intent.
  */
 export function resolveVoiceCommand(rawTranscript: string): VoiceCommandMatch {
-  const normalized = normalizeVoiceTranscript(rawTranscript);
+  // 1. Delegate to Voice Action Engine for Natural Language & Parameters
+  const actionRes = parseVoiceAction(rawTranscript);
+  if (actionRes.matched) {
+    if (actionRes.intent === 'GO_BACK') {
+      return {
+        matched: true,
+        intent: 'GO_BACK',
+        targetLabel: 'Previous Page',
+        confidence: actionRes.confidence,
+        rawTranscript,
+        normalizedTranscript: actionRes.normalizedTranscript,
+        feedbackTitle: actionRes.feedbackTitle,
+        feedbackMessage: actionRes.feedbackMessage,
+      };
+    }
 
-  if (!normalized) {
+    if (actionRes.intent.startsWith('NAVIGATE_')) {
+      return {
+        matched: true,
+        intent: 'NAVIGATE',
+        actionIntent: actionRes.intent,
+        targetRoute: actionRes.targetRoute,
+        targetLabel: actionRes.feedbackTitle?.replace(/^OPEN\s+/, '') || 'Page',
+        confidence: actionRes.confidence,
+        rawTranscript,
+        normalizedTranscript: actionRes.normalizedTranscript,
+        parameters: actionRes.parameters,
+        feedbackTitle: actionRes.feedbackTitle,
+        feedbackMessage: actionRes.feedbackMessage,
+        navigationState: actionRes.navigationState,
+      };
+    }
+
+    // Contextual Action Intents (PLAN_TRIP, CALCULATE_CHARGING_COST, FIND_CHARGERS, etc.)
+    return {
+      matched: true,
+      intent: 'ACTION',
+      actionIntent: actionRes.intent,
+      targetRoute: actionRes.targetRoute,
+      targetLabel: actionRes.feedbackTitle || 'Action',
+      confidence: actionRes.confidence,
+      rawTranscript,
+      normalizedTranscript: actionRes.normalizedTranscript,
+      parameters: actionRes.parameters,
+      feedbackTitle: actionRes.feedbackTitle,
+      feedbackMessage: actionRes.feedbackMessage,
+      navigationState: actionRes.navigationState,
+      contextApplied: actionRes.contextApplied,
+    };
+  }
+
+  // 2. Strict Negative Guards (Anti-collusion for "world" and "volt")
+  const norm = normalizeVoiceTranscript(rawTranscript);
+  if (norm === 'world' || norm === 'word' || norm === 'volt') {
     return {
       matched: false,
       intent: 'UNKNOWN',
       confidence: 0,
       rawTranscript,
-      normalizedTranscript: '',
+      normalizedTranscript: norm,
+      feedbackMessage: actionRes.feedbackMessage,
     };
   }
 
-  // 1. Check for "Back" / "Go Back" Navigation Intent
-  const backKeywords = ['go back', 'back', 'previous', 'previous page', 'return', 'take me back', 'navigate back'];
-  for (const bw of backKeywords) {
-    if (normalized === bw || normalized.startsWith(bw + ' ') || normalized.endsWith(' ' + bw)) {
-      return {
-        matched: true,
-        intent: 'GO_BACK',
-        targetLabel: 'Previous Page',
-        confidence: 0.98,
-        rawTranscript,
-        normalizedTranscript: normalized,
-        matchedKeyword: bw,
-      };
-    }
-  }
-
-  // 2. Exact Match against Defined Aliases
+  // 3. Fallback Route Matching against Defined Aliases & Keywords
   for (const route of VOICE_ROUTES) {
     for (const alias of route.aliases) {
       const normAlias = normalizeVoiceTranscript(alias);
-      if (normalized === normAlias) {
+      if (norm === normAlias) {
         return {
           matched: true,
           intent: 'NAVIGATE',
@@ -355,26 +399,22 @@ export function resolveVoiceCommand(rawTranscript: string): VoiceCommandMatch {
           targetLabel: route.label,
           confidence: 1.0,
           rawTranscript,
-          normalizedTranscript: normalized,
+          normalizedTranscript: norm,
           matchedKeyword: alias,
         };
       }
     }
   }
 
-  // 3. Keyword / Substring Match with Scoring
+  // 4. Keyword / Substring Match with Scoring
   let bestMatch: { route: VoiceRouteDefinition; score: number; keyword: string } | null = null;
-
-  // Clean filler words to test core destination noun
-  const stripped = normalized
+  const stripped = norm
     .replace(/^(open|go to|take me to|navigate to|show|view|switch to|display|launch|load|i want to see|please open|please go to)\s+/i, '')
     .trim();
 
   for (const route of VOICE_ROUTES) {
     for (const kw of route.keywords) {
       const normKw = normalizeVoiceTranscript(kw);
-
-      // Exact match on stripped command (e.g. user said "open map" -> stripped is "map")
       if (stripped === normKw) {
         return {
           matched: true,
@@ -383,15 +423,14 @@ export function resolveVoiceCommand(rawTranscript: string): VoiceCommandMatch {
           targetLabel: route.label,
           confidence: 0.95,
           rawTranscript,
-          normalizedTranscript: normalized,
+          normalizedTranscript: norm,
           matchedKeyword: kw,
         };
       }
 
-      // Word boundary match in full transcript
       const regex = new RegExp(`\\b${normKw}\\b`, 'i');
-      if (regex.test(normalized)) {
-        const score = normKw.length / normalized.length;
+      if (regex.test(norm)) {
+        const score = normKw.length / norm.length;
         if (!bestMatch || score > bestMatch.score) {
           bestMatch = { route, score, keyword: kw };
         }
@@ -407,17 +446,18 @@ export function resolveVoiceCommand(rawTranscript: string): VoiceCommandMatch {
       targetLabel: bestMatch.route.label,
       confidence: Math.min(0.9, 0.6 + bestMatch.score),
       rawTranscript,
-      normalizedTranscript: normalized,
+      normalizedTranscript: norm,
       matchedKeyword: bestMatch.keyword,
     };
   }
 
-  // 4. No Command Recognized
+  // 5. No Command Recognized
   return {
     matched: false,
     intent: 'UNKNOWN',
     confidence: 0,
     rawTranscript,
-    normalizedTranscript: normalized,
+    normalizedTranscript: norm,
+    feedbackMessage: actionRes.feedbackMessage || `Command "${rawTranscript}" not recognized.`,
   };
 }

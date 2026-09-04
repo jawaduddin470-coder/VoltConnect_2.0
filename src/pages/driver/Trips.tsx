@@ -3,10 +3,11 @@ import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserLocation } from '@/hooks/useUserLocation';
 import { chargingDataService } from '@/services/chargingDataService';
-import { geocodingService, GeocodedLocation } from '@/services/geocodingService';
+import { geocodingService, GeocodedLocation, CURATED_INDIAN_DESTINATIONS } from '@/services/geocodingService';
 import { routingService, RouteWaypointInput, RouteResult } from '@/services/routingService';
 import { tripPlanningEngine, EVTripPlan, RecommendedChargingStop, PlanBRecoveryResult } from '@/services/tripPlanningEngine';
 import { journeyAnalyticsService } from '@/services/journeyAnalyticsService';
+import { voiceContextStore } from '@/services/voiceActionEngine';
 import { checkStationCompatibility } from '@/features/charging/utils/compatibility';
 import { EVVehicleSelector } from '@/components/common/EVVehicleSelector';
 import { TripMap } from '@/features/charging/components/TripMap';
@@ -56,36 +57,112 @@ export const SmartTripPlanner: React.FC = () => {
     requestLocation,
   } = useUserLocation();
 
-  // Helper to extract destination from incoming location state or URL params (from VoltMap / Explore)
-  const getIncomingDestination = (): RouteWaypointInput | null => {
-    const stateDest = (location.state as any)?.destination;
-    if (stateDest) {
-      const lat = Number(stateDest.lat ?? stateDest.latitude);
-      const lng = Number(stateDest.lng ?? stateDest.longitude);
+  // Helper to resolve string or object into a RouteWaypointInput
+  const resolveNamedLocation = (raw: any): RouteWaypointInput | null => {
+    if (!raw) return null;
+    if (typeof raw === 'object') {
+      const lat = Number(raw.lat ?? raw.latitude);
+      const lng = Number(raw.lng ?? raw.longitude);
       if (!isNaN(lat) && !isNaN(lng) && lat !== 0) {
         return {
-          name: stateDest.name || stateDest.address || 'Selected Charging Hub',
+          name: raw.name || raw.address || 'Selected Charging Hub',
           latitude: lat,
           longitude: lng,
         };
       }
+      if (raw.name && typeof raw.name === 'string') {
+        return resolveNamedLocation(raw.name);
+      }
+    }
+
+    if (typeof raw === 'string') {
+      const clean = raw.trim().toLowerCase();
+      if (!clean) return null;
+
+      // Match against curated Indian EV corridors
+      const curated = CURATED_INDIAN_DESTINATIONS.find(
+        c =>
+          c.name.toLowerCase() === clean ||
+          (c.city && c.city.toLowerCase() === clean) ||
+          clean.includes(c.name.toLowerCase()) ||
+          c.name.toLowerCase().includes(clean)
+      );
+
+      if (curated) {
+        return {
+          name: curated.name,
+          latitude: curated.latitude,
+          longitude: curated.longitude,
+        };
+      }
+    }
+    return null;
+  };
+
+  // Helper to extract destination from incoming location state or URL params (from VoltMap / Explore / Voice)
+  const getIncomingDestination = (): RouteWaypointInput | null => {
+    const state = location.state as any;
+    if (state?.destination) {
+      const resolved = resolveNamedLocation(state.destination);
+      if (resolved) return resolved;
     }
 
     if (location.search) {
       const params = new URLSearchParams(location.search);
       const qLat = params.get('destLat') || params.get('lat');
       const qLng = params.get('destLng') || params.get('lng');
-      const qName = params.get('destName') || params.get('destination') || params.get('name');
+      const qName = params.get('destName') || params.get('destination') || params.get('name') || params.get('q');
+
       if (qLat && qLng) {
         const lat = parseFloat(qLat);
         const lng = parseFloat(qLng);
         if (!isNaN(lat) && !isNaN(lng)) {
-          return {
-            name: qName ? decodeURIComponent(qName) : 'Selected Charging Hub',
-            latitude: lat,
-            longitude: lng,
-          };
+          let name = 'Selected Charging Hub';
+          if (qName) {
+            try {
+              name = decodeURIComponent(qName);
+            } catch {
+              name = qName;
+            }
+          }
+          return { name, latitude: lat, longitude: lng };
         }
+      }
+
+      if (qName) {
+        let name = qName;
+        try {
+          name = decodeURIComponent(qName);
+        } catch {
+          name = qName;
+        }
+        const resolved = resolveNamedLocation(name);
+        if (resolved) return resolved;
+      }
+    }
+    return null;
+  };
+
+  // Helper to extract origin from incoming location state or URL params
+  const getIncomingOrigin = (): RouteWaypointInput | null => {
+    const state = location.state as any;
+    if (state?.origin) {
+      const resolved = resolveNamedLocation(state.origin);
+      if (resolved) return resolved;
+    }
+
+    if (location.search) {
+      const params = new URLSearchParams(location.search);
+      const qOrigin = params.get('origName') || params.get('origin') || params.get('from');
+      if (qOrigin) {
+        let name = qOrigin;
+        try {
+          name = decodeURIComponent(qOrigin);
+        } catch {
+          name = qOrigin;
+        }
+        const resolved = resolveNamedLocation(name);
+        if (resolved) return resolved;
       }
     }
     return null;
@@ -93,36 +170,55 @@ export const SmartTripPlanner: React.FC = () => {
 
   // Waypoints State
   const [waypoints, setWaypoints] = useState<RouteWaypointInput[]>(() => {
-    const incoming = getIncomingDestination();
-    if (incoming) {
-      return [
-        { name: 'Hyderabad (Gachibowli)', latitude: 17.435, longitude: 78.385 },
-        incoming,
-      ];
+    const incomingDest = getIncomingDestination();
+    const incomingOrig = getIncomingOrigin();
+    const defaultOrig = { name: 'Hyderabad (Gachibowli)', latitude: 17.435, longitude: 78.385 };
+    if (incomingDest) {
+      return [incomingOrig || defaultOrig, incomingDest];
     }
     return [
-      { name: 'Hyderabad (Gachibowli)', latitude: 17.435, longitude: 78.385 },
+      incomingOrig || defaultOrig,
       { name: 'Srinagar (Kashmir)', latitude: 34.0837, longitude: 74.7973 },
     ];
   });
 
-  // Re-sync waypoints when user navigates into /trips with a new selected station from VoltMap
+  // Re-sync waypoints & auto-plan when user navigates into /trips from VoltMap or Voice AI
   useEffect(() => {
-    const incoming = getIncomingDestination();
-    if (incoming) {
-      setWaypoints(prev => {
-        const origin = prev.length > 0 ? prev[0] : { name: 'Hyderabad (Gachibowli)', latitude: 17.435, longitude: 78.385 };
-        const currentDest = prev[prev.length - 1];
-        if (
-          currentDest &&
-          Math.abs(currentDest.latitude - incoming.latitude) < 0.0001 &&
-          Math.abs(currentDest.longitude - incoming.longitude) < 0.0001
-        ) {
-          return prev;
-        }
-        return [origin, incoming];
-      });
+    const incomingDest = getIncomingDestination();
+    const incomingOrig = getIncomingOrigin();
+    const state = location.state as any;
+    const params = new URLSearchParams(location.search);
+
+    const shouldAutoPlan =
+      state?.autoPlan === true ||
+      params.get('autoPlan') === 'true' ||
+      Boolean(state?.destination) ||
+      Boolean(params.get('destLat')) ||
+      Boolean(params.get('destination'));
+
+    let activeReserve = 15;
+    if (state?.safetyReserve) {
+      activeReserve = Number(state.safetyReserve);
+      setSafetyReservePercent(activeReserve);
+    } else if (params.get('reserve') || params.get('safetyReserve')) {
+      activeReserve = Number(params.get('reserve') || params.get('safetyReserve'));
+      setSafetyReservePercent(activeReserve);
+    }
+
+    if (incomingDest) {
+      const orig =
+        incomingOrig ||
+        (waypoints.length > 0
+          ? waypoints[0]
+          : { name: 'Hyderabad (Gachibowli)', latitude: 17.435, longitude: 78.385 });
+
+      const newWaypoints = [orig, incomingDest];
+      setWaypoints(newWaypoints);
       setPlanError(null);
+
+      if (shouldAutoPlan) {
+        handlePlanJourney(newWaypoints, activeReserve);
+      }
     }
   }, [location.state, location.search]);
 
@@ -171,8 +267,10 @@ export const SmartTripPlanner: React.FC = () => {
   const [showVehicleModal, setShowVehicleModal] = useState(false);
 
   // Core EV Trip Planning Handler (TRIP PLAN & MAP REVEAL TRIGGER)
-  const handlePlanJourney = async () => {
-    if (waypoints.length < 2) return;
+  const handlePlanJourney = async (customWaypoints?: RouteWaypointInput[], customReserve?: number) => {
+    const activeWaypoints = customWaypoints || waypoints;
+    const reserve = customReserve ?? safetyReservePercent;
+    if (activeWaypoints.length < 2) return;
     setIsPlanning(true);
     setPlanError(null);
     setPlanBResult(null);
@@ -183,17 +281,17 @@ export const SmartTripPlanner: React.FC = () => {
       setStations(dataset);
 
       const dataInfo = chargingDataService.getDataSourceInfo();
-      console.info(`[PLANNER INPUT] source=${dataInfo.source}, stationCount=${dataset.length}, vehicle=${activeVehicle?.manufacturer || 'BMW'} ${activeVehicle?.model || 'iX'}, SOC=${activeVehicle?.currentBatteryPercent ?? 100}, reserve=${safetyReservePercent}`);
+      console.info(`[PLANNER INPUT] source=${dataInfo.source}, stationCount=${dataset.length}, vehicle=${activeVehicle?.manufacturer || 'BMW'} ${activeVehicle?.model || 'iX'}, SOC=${activeVehicle?.currentBatteryPercent ?? 100}, reserve=${reserve}`);
 
       // 1. Calculate Real Road Route geometry & road distance via OSRM Driving Engine
-      const routeResult = await routingService.calculateRoadRoute(waypoints);
+      const routeResult = await routingService.calculateRoadRoute(activeWaypoints);
 
       // 2. Compute Usable Planning Range, Starting SOC & Corridor Charging Candidates from Firestore + Tolls
       const plan = tripPlanningEngine.planEVJourney(
         routeResult,
         activeVehicle,
         dataset,
-        safetyReservePercent
+        reserve
       );
 
       console.info(`[PLANNER OUTPUT] recommendedStops=${plan.recommendedStops.length}, readiness=${plan.readinessScore.score}, status=${plan.readinessScore.status}`);
@@ -204,6 +302,20 @@ export const SmartTripPlanner: React.FC = () => {
       if (plan.recommendedStops.length > 0) {
         setSelectedStop(plan.recommendedStops[0]);
       }
+
+      // Synchronize calculated financial costs & readiness to Voice AI Context Memory
+      voiceContextStore.updateState({
+        lastCalculatedCost: {
+          chargingCostINR: plan.costSummary.estimatedChargingCostINR,
+          tollCostINR: plan.costSummary.estimatedTollCostINR,
+          totalCostINR: plan.costSummary.totalJourneyCostINR,
+          stopsCount: plan.costSummary.chargingStopsCount,
+          readinessScore: plan.readinessScore.score,
+          distanceKm: plan.totalRoadDistanceKm,
+        },
+        lastDestination: activeWaypoints[activeWaypoints.length - 1].name,
+        lastOrigin: activeWaypoints[0].name,
+      });
     } catch (err: any) {
       console.error('[VoltTrip] Route planning error:', err);
       setPlanError(err.message || 'Unable to calculate road route. Please verify your waypoints.');
@@ -269,9 +381,6 @@ export const SmartTripPlanner: React.FC = () => {
   useEffect(() => {
     chargingDataService.getStations().then(data => {
       setStations(data);
-      if (getIncomingDestination()) {
-        handlePlanJourney();
-      }
     });
   }, []);
 
@@ -539,7 +648,7 @@ export const SmartTripPlanner: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={handlePlanJourney}
+                  onClick={() => handlePlanJourney()}
                   disabled={isPlanning}
                   className="vc-btn vc-btn-teal px-5 py-2 text-xs font-extrabold flex items-center gap-2 cursor-pointer"
                 >
@@ -669,7 +778,7 @@ export const SmartTripPlanner: React.FC = () => {
 
             {/* Primary Journey Plan Action Button */}
             <button
-              onClick={handlePlanJourney}
+              onClick={() => handlePlanJourney()}
               disabled={isPlanning}
               className="w-full vc-btn vc-btn-teal py-4 font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg hover:scale-[1.01] transition-all cursor-pointer"
             >
@@ -775,7 +884,7 @@ export const SmartTripPlanner: React.FC = () => {
                 <span>Route Deviation Detected</span>
               </div>
               <button
-                onClick={handlePlanJourney}
+                onClick={() => handlePlanJourney()}
                 className="px-3 py-1 bg-slate-900 text-white rounded-xl text-[11px]"
               >
                 Recalculate Route

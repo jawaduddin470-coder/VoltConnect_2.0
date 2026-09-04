@@ -45,6 +45,7 @@ function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: num
 export const ExplorePage: React.FC = () => {
   const { user, activeVehicle, addVehicle } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Consuming Global Live Location Hook
   const {
@@ -107,6 +108,26 @@ export const ExplorePage: React.FC = () => {
   useEffect(() => {
     loadStationsData();
   }, []);
+
+  // Synchronize incoming filters from Voice Action Engine or URL params
+  useEffect(() => {
+    const state = location.state as any;
+    const params = new URLSearchParams(location.search);
+
+    if (state?.filterFastOnly || params.get('fastOnly') === 'true') {
+      setFilterFastCharging(true);
+    }
+    if (state?.filterCompatibleOnly || params.get('compatible') === 'true') {
+      setFilterCompatible(true);
+    }
+    if (state?.filterWithinRange || params.get('withinRange') === 'true') {
+      setFilterWithinRange(true);
+    }
+    if (state?.filterNearMe || params.get('nearMe') === 'true') {
+      requestLocation();
+      setFollowMe(true);
+    }
+  }, [location.state, location.search]);
 
   // Handle Geolocation Request for Live Location
   const handleUseMyLocation = () => {

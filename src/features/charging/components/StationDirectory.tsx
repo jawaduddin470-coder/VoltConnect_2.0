@@ -54,8 +54,9 @@ export const StationDirectory: React.FC<StationDirectoryProps> = ({
   const handlePlanTrip = (st: ChargingStation, e: React.MouseEvent) => {
     e.stopPropagation();
     const destName = encodeURIComponent(st.name || st.address || 'Charging Station');
-    navigate(`/trips?destLat=${st.latitude}&destLng=${st.longitude}&destName=${destName}`, {
+    navigate(`/trips?destLat=${st.latitude}&destLng=${st.longitude}&destName=${destName}&autoPlan=true`, {
       state: {
+        autoPlan: true,
         destination: {
           name: st.name,
           lat: st.latitude,

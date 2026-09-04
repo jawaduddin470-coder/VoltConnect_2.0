@@ -58,7 +58,7 @@ export const VoiceNavigationControl: React.FC<VoiceNavigationControlProps> = ({
           className={`relative group inline-flex items-center gap-2 px-3 py-1.5 rounded-full font-sans text-xs font-bold transition-all duration-200 cursor-pointer select-none border focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 shadow-xs ${
             status === 'LISTENING'
               ? 'bg-gradient-to-r from-sky-500 to-teal-500 text-white border-sky-400 shadow-[0_0_16px_rgba(14,165,233,0.4)] scale-105'
-              : status === 'PROCESSING' || status === 'NAVIGATING'
+              : status === 'PROCESSING' || status === 'INTENT_DETECTED' || status === 'EXECUTING' || status === 'NAVIGATING'
               ? 'bg-sky-50 text-sky-700 border-sky-300 animate-pulse'
               : status === 'SUCCESS'
               ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
@@ -71,7 +71,7 @@ export const VoiceNavigationControl: React.FC<VoiceNavigationControlProps> = ({
               ? 'Listening... Click to stop'
               : !isSupported
               ? 'Speech recognition not supported in this browser'
-              : 'Voice Navigation (Click and say "Open Map" or "Dashboard")'
+              : 'Voice AI Copilot (Speak "Plan a trip to Kolkata" or "Find chargers near me")'
           }
         >
           {/* Animated Status Icon */}
@@ -82,8 +82,10 @@ export const VoiceNavigationControl: React.FC<VoiceNavigationControlProps> = ({
                 <span className="w-0.5 h-4 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
                 <span className="w-0.5 h-2.5 bg-white rounded-full animate-bounce" />
               </div>
-            ) : status === 'NAVIGATING' ? (
-              <Navigation className="w-3.5 h-3.5 text-sky-600 animate-spin" />
+            ) : status === 'INTENT_DETECTED' || status === 'PROCESSING' ? (
+              <Sparkles className="w-3.5 h-3.5 text-sky-600 animate-spin" />
+            ) : status === 'EXECUTING' || status === 'NAVIGATING' ? (
+              <Navigation className="w-3.5 h-3.5 text-teal-600 animate-spin" />
             ) : status === 'SUCCESS' ? (
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
             ) : status === 'ERROR' ? (
@@ -100,13 +102,15 @@ export const VoiceNavigationControl: React.FC<VoiceNavigationControlProps> = ({
                 ? 'Listening...'
                 : status === 'PROCESSING'
                 ? 'Understanding...'
-                : status === 'NAVIGATING'
-                ? `Opening ${lastMatch?.targetLabel || 'Page'}...`
+                : status === 'INTENT_DETECTED'
+                ? (lastMatch?.feedbackTitle || 'Intent Found')
+                : status === 'EXECUTING' || status === 'NAVIGATING'
+                ? (lastMatch?.parameters?.destination ? `Route: ${lastMatch.parameters.destination}` : 'Executing...')
                 : status === 'SUCCESS'
-                ? 'Navigated'
+                ? 'Action Executed'
                 : status === 'ERROR'
                 ? 'Retry Voice'
-                : 'Voice Nav'}
+                : 'Voice AI'}
             </span>
           )}
         </button>
@@ -122,16 +126,22 @@ export const VoiceNavigationControl: React.FC<VoiceNavigationControlProps> = ({
       </div>
 
       {/* 2. REAL-TIME LIVE TRANSCRIPT & FEEDBACK HUD OVERLAY */}
-      {(status === 'LISTENING' || status === 'PROCESSING' || status === 'NAVIGATING' || status === 'ERROR') && (
-        <div className="absolute top-full right-0 mt-2 z-50 w-72 sm:w-80 bg-slate-950/95 border border-slate-700/80 rounded-2xl shadow-2xl p-3.5 text-white backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
+      {(status === 'LISTENING' || status === 'PROCESSING' || status === 'INTENT_DETECTED' || status === 'EXECUTING' || status === 'NAVIGATING' || status === 'ERROR') && (
+        <div className="absolute top-full right-0 mt-2 z-50 w-72 sm:w-84 bg-slate-950/95 border border-slate-700/80 rounded-2xl shadow-2xl p-3.5 text-white backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
           
           <div className="flex items-center justify-between pb-2 border-b border-slate-800">
             <div className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${
-                status === 'LISTENING' ? 'bg-sky-400 animate-ping' : status === 'NAVIGATING' ? 'bg-emerald-400' : 'bg-amber-400'
+                status === 'LISTENING' ? 'bg-sky-400 animate-ping' : status === 'EXECUTING' || status === 'NAVIGATING' ? 'bg-emerald-400' : 'bg-amber-400'
               }`} />
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">
-                {status === 'LISTENING' ? 'Listening for command...' : status === 'NAVIGATING' ? 'Executing Navigation' : 'Voice Assistant'}
+                {status === 'LISTENING'
+                  ? 'Listening for speech...'
+                  : status === 'INTENT_DETECTED'
+                  ? 'Intent Recognized'
+                  : status === 'EXECUTING' || status === 'NAVIGATING'
+                  ? 'Executing Action'
+                  : 'Voice Assistant'}
               </span>
             </div>
             <button onClick={resetState} className="text-slate-400 hover:text-white p-0.5">
@@ -142,15 +152,34 @@ export const VoiceNavigationControl: React.FC<VoiceNavigationControlProps> = ({
           {/* Live Recognized Speech Display */}
           <div className="py-2.5">
             {activeTranscript ? (
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="text-[10px] font-mono text-slate-400 uppercase">You said:</div>
                 <div className="text-xs font-bold text-sky-300 font-mono bg-slate-900/90 p-2 rounded-xl border border-slate-800">
                   "{activeTranscript}"
                 </div>
+
+                {/* Intent & Extracted Parameters Display */}
+                {lastMatch?.feedbackTitle && (
+                  <div className="p-2 rounded-xl bg-slate-900/60 border border-teal-800/40 text-[11px] space-y-1 font-mono">
+                    <div className="text-teal-400 font-bold flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-teal-400" />
+                      <span>{lastMatch.feedbackTitle}</span>
+                    </div>
+                    {lastMatch.feedbackMessage && (
+                      <div className="text-slate-300 text-[10px]">{lastMatch.feedbackMessage}</div>
+                    )}
+                    {lastMatch.parameters?.destination && (
+                      <div className="text-sky-300 text-[10px]">
+                        📍 Destination: <span className="font-bold">{lastMatch.parameters.destination}</span>
+                        {lastMatch.parameters.origin ? ` (from ${lastMatch.parameters.origin})` : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : status === 'LISTENING' ? (
               <div className="text-xs text-slate-300 font-medium italic">
-                Speak now... e.g. <span className="text-sky-400 font-bold">"Open Map"</span> or <span className="text-sky-400 font-bold">"Dashboard"</span>
+                Speak naturally... e.g. <span className="text-sky-400 font-bold">"Plan a trip to Kolkata"</span> or <span className="text-sky-400 font-bold">"Find fast chargers"</span>
               </div>
             ) : null}
 
@@ -164,7 +193,7 @@ export const VoiceNavigationControl: React.FC<VoiceNavigationControlProps> = ({
 
           {/* Quick Voice Hints */}
           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400 font-mono">
-            <span>Say: "Dashboard", "Map", "Trips", "Garage", "Health", "AI"</span>
+            <span>Natural EV Copilot active</span>
           </div>
 
         </div>

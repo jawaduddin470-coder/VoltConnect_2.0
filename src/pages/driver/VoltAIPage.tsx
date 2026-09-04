@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { voltAIService } from '@/services/voltAIService';
 import { chargingDataService } from '@/services/chargingDataService';
@@ -129,6 +129,22 @@ export const VoltAIPage: React.FC = () => {
       },
     ]);
   };
+
+  const location = useLocation();
+  const autoQueryProcessedRef = useRef(false);
+
+  // Auto-process incoming voice query or URL parameter
+  useEffect(() => {
+    const stateQuery = (location.state as any)?.autoQuery;
+    const params = new URLSearchParams(location.search);
+    const searchParamQuery = params.get('q') || params.get('query');
+    const incomingQuery = stateQuery || searchParamQuery;
+
+    if (incomingQuery && !autoQueryProcessedRef.current) {
+      autoQueryProcessedRef.current = true;
+      handleQuery(incomingQuery);
+    }
+  }, [location.state, location.search]);
 
   const handleResetConversation = () => {
     setCards([

@@ -6,6 +6,8 @@ export type VoiceNavigationStatus =
   | 'IDLE'
   | 'LISTENING'
   | 'PROCESSING'
+  | 'INTENT_DETECTED'
+  | 'EXECUTING'
   | 'NAVIGATING'
   | 'SUCCESS'
   | 'ERROR';
@@ -66,7 +68,7 @@ export function useVoiceNavigation(): UseVoiceNavigationReturn {
     isExplicitStopRef.current = false;
   }, [clearResetTimer]);
 
-  // Execute resolved voice command with proper feedback & reset
+  // Execute resolved voice command with proper state progression & feedback
   const executeCommand = useCallback(
     (commandText: string) => {
       const match = resolveVoiceCommand(commandText);
@@ -75,28 +77,30 @@ export function useVoiceNavigation(): UseVoiceNavigationReturn {
       setInterimTranscript('');
 
       if (match.matched) {
-        setStatus('NAVIGATING');
+        setStatus('INTENT_DETECTED');
         setErrorMessage(null);
 
-        // Perform smooth routing
         setTimeout(() => {
-          if (match.intent === 'GO_BACK') {
-            navigate(-1);
-          } else if (match.targetRoute) {
-            navigate(match.targetRoute);
-          }
+          setStatus('EXECUTING');
 
-          setStatus('SUCCESS');
+          setTimeout(() => {
+            if (match.intent === 'GO_BACK') {
+              navigate(-1);
+            } else if (match.targetRoute) {
+              navigate(match.targetRoute, { state: match.navigationState });
+            }
 
-          // Auto-reset back to IDLE ready state
-          clearResetTimer();
-          resetTimerRef.current = setTimeout(() => {
-            resetState();
-          }, 1500);
-        }, 350);
+            setStatus('SUCCESS');
+
+            clearResetTimer();
+            resetTimerRef.current = setTimeout(() => {
+              resetState();
+            }, 1800);
+          }, 350);
+        }, 300);
       } else {
         setStatus('ERROR');
-        setErrorMessage(`Command "${commandText}" not recognized. Try "Open Dashboard" or "Open Map".`);
+        setErrorMessage(match.feedbackMessage || `Command "${commandText}" not recognized. Try "Plan a trip to Kolkata" or "Open Map".`);
 
         clearResetTimer();
         resetTimerRef.current = setTimeout(() => {
