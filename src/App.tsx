@@ -106,7 +106,11 @@ export const App: React.FC = () => {
   const [forceShowIntro, setForceShowIntro] = useState(false);
 
   useEffect(() => {
-    const handleReplay = () => setForceShowIntro(true);
+    const handleReplay = () => {
+      sessionStorage.removeItem('vc_intro_seen');
+      localStorage.removeItem('vc_intro_seen');
+      setForceShowIntro(true);
+    };
     window.addEventListener('vc_replay_intro', handleReplay);
     return () => window.removeEventListener('vc_replay_intro', handleReplay);
   }, []);

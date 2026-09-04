@@ -48,12 +48,17 @@ export const VoltConnectIntro: React.FC<VoltConnectIntroProps> = ({
       return;
     }
 
-    const hasSeenIntro = localStorage.getItem('vc_intro_seen') === 'true';
+    // Clear any legacy permanent localStorage flag that prevented first-visit entry
+    if (localStorage.getItem('vc_intro_seen')) {
+      localStorage.removeItem('vc_intro_seen');
+    }
+
+    const hasSeenIntro = sessionStorage.getItem('vc_intro_seen') === 'true';
 
     // Auto-show conditions:
     // 1. Forced via prop (replay)
     // 2. Forced via URL query param (?intro=1, ?intro=debug, ?replay=1)
-    // 3. First visit (hasSeenIntro === false) on root route "/"
+    // 3. First visit in browser session (hasSeenIntro === false) on root route "/"
     if (forceShow || isForcedByQuery || (!hasSeenIntro && location.pathname === '/')) {
       console.log('[CINEMATIC INTRO] mounted & starting', {
         forceShow,
@@ -69,7 +74,7 @@ export const VoltConnectIntro: React.FC<VoltConnectIntroProps> = ({
       startTimeRef.current = null;
       pausedTimeRef.current = 0;
     } else {
-      console.log('[CINEMATIC INTRO] skipped (already seen)', {
+      console.log('[CINEMATIC INTRO] skipped (already seen in session)', {
         hasSeenIntro,
         pathname: location.pathname,
       });
@@ -88,7 +93,7 @@ export const VoltConnectIntro: React.FC<VoltConnectIntroProps> = ({
     // Begin smooth spatial blur and opacity exit transition
     setIsExiting(true);
     if (!isDebugMode) {
-      localStorage.setItem('vc_intro_seen', 'true');
+      sessionStorage.setItem('vc_intro_seen', 'true');
     }
 
     setTimeout(() => {
