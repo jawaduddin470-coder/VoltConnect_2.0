@@ -1,397 +1,558 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { LogoFull } from '@/assets/LogoFull';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useVoiceNavigation } from '@/hooks/useVoiceNavigation';
+import { resolveVoiceCommand } from '@/services/voiceNavigationService';
 import { IntroReplay } from '@/components/intro/IntroReplay';
 import { INITIAL_CHARGING_STATIONS } from '@/features/charging/data/stationsSeed';
-import { calculateVoltScore } from '@/features/charging/utils/voltScore';
 import {
-  Zap,
-  MapPin,
+  Mic,
+  MicOff,
   Navigation,
-  Activity,
-  Wrench,
   Sparkles,
   ArrowRight,
   ShieldCheck,
-  Bot,
+  CheckCircle2,
+  Compass,
+  MapPin,
+  Battery,
+  Zap,
+  Activity,
+  Wrench,
   BarChart3,
+  Car,
+  Layers,
   Cpu,
   Radio,
-  Layers,
+  Clock,
   ChevronRight,
-  CheckCircle2,
+  Play,
 } from 'lucide-react';
 
 export const LandingPage: React.FC = () => {
-  const previewStation = INITIAL_CHARGING_STATIONS[0];
-  const voltScoreObj = calculateVoltScore(previewStation);
+  const navigate = useNavigate();
+  const {
+    isSupported,
+    status: voiceStatus,
+    transcript,
+    interimTranscript,
+    lastMatch,
+    errorMessage,
+    startListening,
+    stopListening,
+    toggleListening,
+    resetState,
+  } = useVoiceNavigation();
+
+  // Interactive Voice Demo Simulation State
+  const [demoStep, setDemoStep] = useState<'IDLE' | 'LISTENING' | 'UNDERSTANDING' | 'EXECUTING' | 'SUCCESS'>('IDLE');
+  const [demoPrompt, setDemoPrompt] = useState('Open Smart Trip Planner');
+  const [demoRoute, setDemoRoute] = useState('/trips');
+  const [demoLabel, setDemoLabel] = useState('Smart Trip Planner');
+
+  const samplePrompts = [
+    { text: 'Open Dashboard', route: '/dashboard', label: 'Home Dashboard', icon: Compass },
+    { text: 'Find chargers on VoltMap', route: '/explore', label: 'VoltMap Charging Network', icon: MapPin },
+    { text: 'Plan journey to Srinagar', route: '/trips', label: 'Smart Trip Planner', icon: Navigation },
+    { text: 'Check battery health SOH', route: '/health', label: 'VoltHealth SOH', icon: Activity },
+    { text: 'Book service at nearest hub', route: '/care', label: 'VoltCare Service', icon: Wrench },
+  ];
+
+  const handleRunDemo = (promptText: string, route: string, label: string) => {
+    setDemoPrompt(promptText);
+    setDemoRoute(route);
+    setDemoLabel(label);
+    setDemoStep('LISTENING');
+
+    setTimeout(() => {
+      setDemoStep('UNDERSTANDING');
+    }, 900);
+
+    setTimeout(() => {
+      setDemoStep('EXECUTING');
+    }, 1800);
+
+    setTimeout(() => {
+      setDemoStep('SUCCESS');
+    }, 2700);
+  };
+
+  const isRealListening = voiceStatus === 'LISTENING';
+  const displayTranscript = interimTranscript || transcript;
 
   return (
-    <div className="space-y-24 pb-20 overflow-hidden">
+    <div className="space-y-28 pb-28 overflow-hidden font-sans">
       
-      {/* 1. HERO SECTION — EDITORIAL EV ECOSYSTEM COMPOSITION */}
-      <section className="relative pt-8 pb-16 lg:pt-16 lg:pb-24 rounded-3xl bg-white border border-slate-200/90 shadow-xs overflow-hidden">
+      {/* =========================================================================
+          1. BRAND NEW HERO SECTION: "VOICE ➔ INTELLIGENCE ➔ ACTION"
+          ========================================================================= */}
+      <section className="relative pt-6 pb-16 lg:pt-12 lg:pb-24 rounded-3xl bg-slate-950 text-white border border-slate-800 shadow-2xl overflow-hidden">
         
-        {/* Subtle Background Grid Lines */}
-        <div className="absolute inset-0 pointer-events-none opacity-40">
+        {/* Subtle Ambient Night Sky & Energy Grid Lines */}
+        <div className="absolute inset-0 pointer-events-none opacity-25">
+          <div className="absolute top-0 inset-x-0 h-96 bg-gradient-to-b from-sky-500/20 via-teal-500/5 to-transparent blur-3xl" />
           <svg width="100%" height="100%">
-            <pattern id="public_hero_grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#E2E8F0" strokeWidth="1" />
+            <pattern id="hero_dark_grid" width="48" height="48" patternUnits="userSpaceOnUse">
+              <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#1E293B" strokeWidth="0.8" />
             </pattern>
-            <rect width="100%" height="100%" fill="url(#public_hero_grid)" />
+            <rect width="100%" height="100%" fill="url(#hero_dark_grid)" />
           </svg>
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          
+          {/* Top Pill Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-8">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 text-xs font-mono font-bold uppercase tracking-wider">
+              <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+              VOLTCONNECT 2.0 • VOICE-ENABLED MOBILITY INTELLIGENCE
+            </div>
+
+            <div className="flex items-center gap-2">
+              <IntroReplay onReplay={() => window.dispatchEvent(new CustomEvent('vc_replay_intro'))} />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             
-            {/* Left Column: Value Proposition & CTAs */}
-            <div className="lg:col-span-7 space-y-6 text-left">
+            {/* Left Column: Bold Value Proposition & Actions */}
+            <div className="lg:col-span-6 space-y-6 text-left">
               
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-50 border border-sky-200 text-sky-700 text-xs font-bold uppercase tracking-wider">
-                  <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
-                  VoltConnect Platform 2.0
-                </div>
-
-                <IntroReplay onReplay={() => window.dispatchEvent(new CustomEvent('vc_replay_intro'))} />
-              </div>
-
-              <div className="space-y-3">
-                <h1 className="font-heading text-4xl sm:text-6xl font-extrabold text-navy-900 tracking-tight leading-[1.1]">
-                  Electric mobility, <span className="text-sky-500">connected.</span>
+              <div className="space-y-4">
+                <h1 className="font-heading text-4xl sm:text-6xl lg:text-[62px] font-extrabold text-white tracking-tight leading-[1.08]">
+                  Speak Naturally. <br />
+                  <span className="bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400 bg-clip-text text-transparent">
+                    Let Your EV Mobility Take Action.
+                  </span>
                 </h1>
-                <p className="text-base sm:text-lg text-slate-600 max-w-xl font-medium leading-relaxed">
-                  One intelligent ecosystem for EV charging, navigation, vehicle health, maintenance and intelligence.
+
+                <p className="text-base sm:text-lg text-slate-300 max-w-xl font-medium leading-relaxed">
+                  Experience hands-free EV navigation, real-time charging corridor matching, instant battery health diagnostics, and contextual AI copilot — powered by natural voice interaction.
                 </p>
               </div>
 
               {/* Primary & Secondary CTAs */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 pt-2">
                 <Link
                   to="/signup"
-                  className="vc-btn vc-btn-teal py-4 px-8 text-sm font-extrabold shadow-md hover:scale-[1.02] transition-all flex items-center justify-center gap-2.5"
+                  className="px-7 py-4 rounded-2xl bg-gradient-to-r from-sky-500 to-teal-500 hover:from-sky-400 hover:to-teal-400 text-slate-950 font-heading font-extrabold text-sm tracking-wide shadow-lg hover:shadow-[0_0_24px_rgba(14,165,233,0.4)] transition-all flex items-center justify-center gap-2.5 hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  <span>GET STARTED</span>
+                  <span>GET STARTED FREE</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
 
                 <Link
                   to="/explore"
-                  className="vc-btn vc-btn-secondary py-4 px-8 text-sm font-extrabold border-slate-300 hover:border-sky-500 transition-all flex items-center justify-center gap-2"
+                  className="px-7 py-4 rounded-2xl bg-slate-900/90 hover:bg-slate-800 text-white font-heading font-bold text-sm border border-slate-700 hover:border-sky-500/80 transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  <MapPin className="w-4 h-4 text-sky-500" />
+                  <MapPin className="w-4 h-4 text-sky-400" />
                   <span>EXPLORE VOLTMAP</span>
                 </Link>
               </div>
 
-              {/* Ecosystem Trust Signals */}
-              <div className="pt-6 border-t border-slate-100 grid grid-cols-3 gap-4 text-xs font-semibold text-slate-500">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-teal-500 shrink-0" />
-                  <span>Multi-EV Form Factors</span>
+              {/* Verified Trust Metrics */}
+              <div className="pt-6 border-t border-slate-800/80 grid grid-cols-3 gap-4 text-xs font-semibold text-slate-400">
+                <div className="space-y-0.5">
+                  <div className="text-white font-extrabold font-mono text-base">1,771+</div>
+                  <div className="text-[11px] text-slate-400">Fast Charging Hubs</div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-teal-500 shrink-0" />
-                  <span>Verified Network Data</span>
+                <div className="space-y-0.5">
+                  <div className="text-white font-extrabold font-mono text-base">100%</div>
+                  <div className="text-[11px] text-slate-400">Voice Zero-Click</div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-teal-500 shrink-0" />
-                  <span>Contextual AI Copilot</span>
+                <div className="space-y-0.5">
+                  <div className="text-white font-extrabold font-mono text-base">703</div>
+                  <div className="text-[11px] text-slate-400">Indian Cities</div>
                 </div>
               </div>
 
             </div>
 
-            {/* Right Column: Abstract EV Ecosystem Visualization & Volt Pulse Motif */}
-            <div className="lg:col-span-5 relative">
-              <div className="p-6 sm:p-8 rounded-3xl bg-slate-900 text-white shadow-2xl space-y-6 relative overflow-hidden border border-slate-800">
+            {/* Right Column: CENTRAL INTERACTIVE VOICE CONSOLE */}
+            <div className="lg:col-span-6 relative">
+              <div className="bg-slate-900/90 border border-slate-700/80 backdrop-blur-2xl rounded-3xl p-6 sm:p-8 shadow-[0_0_50px_rgba(14,165,233,0.12)] space-y-6 relative overflow-hidden">
                 
-                {/* Visual Header */}
+                {/* Console Header Bar */}
                 <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    <Cpu className="w-4 h-4 text-sky-400" />
-                    <span>Ecosystem Architecture</span>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-xs font-mono font-extrabold text-white uppercase tracking-wider">
+                      VOICE COMMAND CONSOLE
+                    </span>
                   </div>
-                  <span className="vc-badge vc-badge-sky text-[9px]">VOLT PULSE ACTIVE</span>
+
+                  <span className="px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-500/30 text-[10px] font-mono font-bold text-sky-400 uppercase">
+                    {isRealListening ? 'LIVE AUDIO' : 'INTERACTIVE DEMO'}
+                  </span>
                 </div>
 
-                {/* Technical Ecosystem Node Flow Visualization */}
-                <div className="space-y-4 text-xs">
+                {/* Central Acoustic Waveform & Microphone Hub */}
+                <div className="flex flex-col items-center justify-center py-6 space-y-4 text-center">
                   
-                  {/* Node 1: Vehicle Energy State */}
-                  <div className="p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold">
-                        <Activity className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="font-bold text-white">Vehicle Subsystem</div>
-                        <div className="text-[10px] text-slate-400">Usable Energy: 43.2 kWh</div>
-                      </div>
+                  {/* Dynamic Glowing Mic Button */}
+                  <div className="relative">
+                    {/* Pulsing Acoustic Rings */}
+                    {(isRealListening || demoStep === 'LISTENING' || demoStep === 'UNDERSTANDING') && (
+                      <>
+                        <div className="absolute inset-0 rounded-full bg-sky-500/20 animate-ping" />
+                        <div className="absolute -inset-3 rounded-full bg-teal-500/15 animate-pulse" />
+                      </>
+                    )}
+
+                    <button
+                      onClick={toggleListening}
+                      className={`relative z-10 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl transition-all cursor-pointer hover:scale-105 active:scale-95 border-2 ${
+                        isRealListening
+                          ? 'bg-gradient-to-r from-sky-500 to-teal-400 text-slate-950 border-white shadow-[0_0_30px_#38BDF8]'
+                          : 'bg-slate-800 hover:bg-slate-700 text-sky-400 border-slate-600 hover:border-sky-400 shadow-[0_0_20px_rgba(14,165,233,0.2)]'
+                      }`}
+                      title="Click to Speak a Command"
+                    >
+                      <Mic className="w-8 h-8" />
+                    </button>
+                  </div>
+
+                  {/* Dynamic Acoustic Spectrum Frequency Bars */}
+                  <div className="flex items-center justify-center gap-1 h-8">
+                    {[40, 75, 95, 60, 100, 80, 50, 90, 65, 85, 45, 70].map((h, i) => (
+                      <span
+                        key={i}
+                        className={`w-1 rounded-full transition-all duration-150 ${
+                          isRealListening || demoStep === 'LISTENING'
+                            ? 'bg-gradient-to-t from-sky-500 to-teal-400 animate-pulse'
+                            : 'bg-slate-800'
+                        }`}
+                        style={{
+                          height: isRealListening || demoStep === 'LISTENING' ? `${h}%` : '15%',
+                          animationDelay: `${i * 0.08}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Status Indicator & Live Transcript Display */}
+                  <div className="space-y-1.5 max-w-sm">
+                    <div className="text-xs font-mono font-extrabold uppercase tracking-widest text-slate-400">
+                      {isRealListening
+                        ? 'LISTENING TO MICROPHONE...'
+                        : demoStep === 'LISTENING'
+                        ? '1. LISTENING TO SPOKEN INPUT...'
+                        : demoStep === 'UNDERSTANDING'
+                        ? '2. UNDERSTANDING INTENT VIA AI...'
+                        : demoStep === 'EXECUTING'
+                        ? '3. EXECUTING NAVIGATION ACTION...'
+                        : demoStep === 'SUCCESS'
+                        ? '✓ COMMAND EXECUTED SUCCESSFULLY'
+                        : 'TAP MICROPHONE OR TRY PROMPTS BELOW'}
                     </div>
-                    <span className="text-emerald-400 font-bold text-[11px]">78% SOC</span>
-                  </div>
 
-                  {/* Pulsing Connector Path */}
-                  <div className="flex justify-center my-1">
-                    <div className="w-0.5 h-6 bg-gradient-to-b from-teal-500 to-sky-500 animate-pulse" />
-                  </div>
-
-                  {/* Node 2: Station Hub & VoltScore */}
-                  <div className="p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold">
-                        <Zap className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="font-bold text-white">Infrastructure Node</div>
-                        <div className="text-[10px] text-slate-400">150kW CCS2 Fast Ports</div>
-                      </div>
+                    <div className="text-sm font-extrabold text-white font-mono bg-slate-950 p-3 rounded-2xl border border-slate-800 shadow-inner">
+                      {displayTranscript ? (
+                        <span className="text-sky-300">"{displayTranscript}"</span>
+                      ) : demoStep !== 'IDLE' ? (
+                        <span className="text-sky-300">"{demoPrompt}"</span>
+                      ) : (
+                        <span className="text-slate-500">"Speak any command e.g. Open Map, Dashboard..."</span>
+                      )}
                     </div>
-                    <span className="vc-badge vc-badge-teal text-[10px]">VoltScore 96</span>
                   </div>
 
-                  {/* Pulsing Connector Path */}
-                  <div className="flex justify-center my-1">
-                    <div className="w-0.5 h-6 bg-gradient-to-b from-sky-500 to-emerald-500 animate-pulse" />
-                  </div>
-
-                  {/* Node 3: Intelligence & Routing */}
-                  <div className="p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
-                        <Sparkles className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="font-bold text-white">VoltAI & Insight Engine</div>
-                        <div className="text-[10px] text-slate-400">Data-Grounded Copilot</div>
-                      </div>
+                  {/* Quick Action Navigation on Match */}
+                  {demoStep === 'SUCCESS' && (
+                    <div className="pt-1 animate-in fade-in zoom-in-95 duration-300">
+                      <button
+                        onClick={() => navigate(demoRoute)}
+                        className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold flex items-center gap-2 shadow-lg transition-all"
+                      >
+                        <span>Open {demoLabel}</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <span className="text-sky-400 font-bold text-[11px]">Synced</span>
-                  </div>
+                  )}
 
                 </div>
 
-                <div className="pt-2 text-[10px] text-slate-400 text-center uppercase tracking-widest font-bold">
-                  Energy &rarr; Vehicle &rarr; Charger &rarr; Network
+                {/* Sample Voice Prompt Chips */}
+                <div className="space-y-2.5 pt-2 border-t border-slate-800">
+                  <div className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                    Interactive Voice Shortcuts:
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {samplePrompts.map((p, idx) => {
+                      const Icon = p.icon;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handleRunDemo(p.text, p.route, p.label)}
+                          className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 hover:border-sky-500 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs hover:scale-105 active:scale-95"
+                        >
+                          <Icon className="w-3.5 h-3.5 text-sky-400" />
+                          <span>"{p.text}"</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
               </div>
             </div>
 
           </div>
+
         </div>
       </section>
 
-      {/* 2. VOLTMAP SHOWCASE SECTION */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        <div className="vc-card p-8 lg:p-10 bg-slate-900 text-white rounded-3xl space-y-8 shadow-xl relative overflow-hidden">
+      {/* =========================================================================
+          2. CONNECTED "HOW IT WORKS" FLOW: SPEAK ➔ UNDERSTAND ➔ ACT
+          ========================================================================= */}
+      <section className="space-y-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div className="text-center space-y-3 max-w-2xl mx-auto">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-50 border border-sky-200 text-sky-700 text-xs font-bold uppercase tracking-wider">
+            <Sparkles className="w-3.5 h-3.5" /> THE INTELLIGENT WORKFLOW
+          </div>
+          <h2 className="font-heading text-3xl sm:text-5xl font-extrabold text-navy-900 tracking-tight">
+            How Voice Intelligence Works
+          </h2>
+          <p className="text-sm sm:text-base text-slate-600 font-medium">
+            A seamless three-step pipeline converting your spoken words into verified EV routing, telemetry, and actions.
+          </p>
+        </div>
+
+        {/* 3-Step Connected Flow Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
           
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-slate-800 pb-6">
-            <div className="space-y-2 max-w-xl">
-              <span className="vc-badge vc-badge-sky text-[10px] uppercase">Core Platform Engine</span>
-              <h2 className="font-heading text-3xl font-extrabold">VoltMap Charging Network Intelligence</h2>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Vehicle-aware charging station lookup factoring connector compatibility, tariff transparency, and VoltScore reliability.
+          {/* STEP 01 — SPEAK */}
+          <div className="vc-card p-6 sm:p-8 bg-white border border-slate-200/90 shadow-card hover:shadow-card-hover transition-all space-y-4 relative group">
+            <div className="w-12 h-12 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-600 group-hover:scale-110 transition-transform">
+              <Mic className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-mono font-extrabold text-sky-600 uppercase tracking-widest">
+                STEP 01
+              </div>
+              <h3 className="font-heading text-xl font-extrabold text-navy-900">
+                Speak Naturally
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                Tap the microphone and tell VoltConnect what you need in plain language without rigid keywords or memorized commands.
               </p>
             </div>
 
-            <Link
-              to="/explore"
-              className="vc-btn vc-btn-teal py-3 px-6 text-xs font-bold flex items-center gap-2 self-start md:self-auto shrink-0"
-            >
-              <span>Explore Full Map</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+            <div className="pt-3 border-t border-slate-100 text-[11px] font-mono text-slate-500">
+              e.g. <span className="text-sky-600 font-bold">"Where is the nearest fast charger?"</span>
+            </div>
           </div>
 
-          {/* Interactive Station Preview Card */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            
-            <div className="lg:col-span-7 p-6 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-[10px] font-bold text-sky-400 uppercase tracking-widest">Verified Station Preview</div>
-                  <h3 className="font-heading font-extrabold text-lg text-white mt-0.5">{previewStation.name}</h3>
-                  <p className="text-xs text-slate-400 mt-1">{previewStation.address}</p>
-                </div>
-
-                {/* Signature VoltScore Ring */}
-                <div className="vc-voltscore-ring w-12 h-12 border-emerald-500 text-emerald-400 bg-emerald-950/60 text-xs shrink-0 font-extrabold">
-                  {voltScoreObj.score}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-xs">
-                <div className="p-3 rounded-xl bg-slate-900 border border-slate-700/80">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold block">Status</span>
-                  <span className="font-bold text-emerald-400">Available</span>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-900 border border-slate-700/80">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold block">Ports Open</span>
-                  <span className="font-bold text-white">3 of 4 Open</span>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-900 border border-slate-700/80">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold block">Tariff</span>
-                  <span className="font-bold text-sky-400">₹21.0 / kWh</span>
-                </div>
-              </div>
+          {/* STEP 02 — UNDERSTAND */}
+          <div className="vc-card p-6 sm:p-8 bg-white border border-slate-200/90 shadow-card hover:shadow-card-hover transition-all space-y-4 relative group">
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-600 group-hover:scale-110 transition-transform">
+              <Cpu className="w-6 h-6" />
             </div>
 
-            <div className="lg:col-span-5 space-y-4 text-xs text-slate-300">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold shrink-0">
-                  <ShieldCheck className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-bold text-white">VoltScore Rating Engine</div>
-                  <p className="text-slate-400 text-[11px] mt-0.5">Evaluates charger uptime, pricing accuracy, data freshness, and user report history.</p>
-                </div>
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-mono font-extrabold text-teal-600 uppercase tracking-widest">
+                STEP 02
               </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold shrink-0">
-                  <Layers className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-bold text-white">Connector Filter Matching</div>
-                  <p className="text-slate-400 text-[11px] mt-0.5">Filters stations matching your active EV's connector standard (CCS2, Type2, CHAdeMO).</p>
-                </div>
-              </div>
+              <h3 className="font-heading text-xl font-extrabold text-navy-900">
+                AI Intent Analysis
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                Contextual EV AI cross-references your active vehicle specs, battery SOC, live charger availability, and corridor safety.
+              </p>
             </div>
 
+            <div className="pt-3 border-t border-slate-100 text-[11px] font-mono text-slate-500">
+              <span>Context: </span>
+              <span className="text-teal-600 font-bold">Battery SOC + Nominal Range</span>
+            </div>
+          </div>
+
+          {/* STEP 03 — ACT */}
+          <div className="vc-card p-6 sm:p-8 bg-white border border-slate-200/90 shadow-card hover:shadow-card-hover transition-all space-y-4 relative group">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform">
+              <Navigation className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-mono font-extrabold text-emerald-600 uppercase tracking-widest">
+                STEP 03
+              </div>
+              <h3 className="font-heading text-xl font-extrabold text-navy-900">
+                Instant Execution
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                Zero-click navigation instantly loads optimal charging stops, triggers battery health diagnostics, or opens your dashboard.
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 text-[11px] font-mono text-slate-500">
+              <span>Result: </span>
+              <span className="text-emerald-600 font-bold">100/100 Safe Journey Readiness</span>
+            </div>
           </div>
 
         </div>
+
       </section>
 
-      {/* 3. EDITORIAL ECOSYSTEM FEATURE PRESENTATION */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+      {/* =========================================================================
+          3. FULL ECOSYSTEM CAPABILITY SHOWCASE (4 CORE PILLARS)
+          ========================================================================= */}
+      <section className="space-y-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        <div className="text-center space-y-2 max-w-2xl mx-auto">
-          <span className="vc-badge vc-badge-teal">Integrated Platform Capabilities</span>
-          <h2 className="font-heading text-3xl font-extrabold text-navy-900">
-            Engineered for every dimension of EV mobility.
-          </h2>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200/90 pb-6">
+          <div className="space-y-2">
+            <span className="text-xs font-mono font-extrabold text-sky-600 uppercase tracking-widest">
+              NATIONWIDE EV PLATFORM
+            </span>
+            <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-navy-900 tracking-tight">
+              One Unified EV Ecosystem
+            </h2>
+          </div>
+
+          <Link
+            to="/explore"
+            className="text-xs font-bold text-sky-600 hover:text-sky-700 flex items-center gap-1.5 group"
+          >
+            <span>Explore all subsystems</span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </Link>
         </div>
 
-        {/* Feature Split 1: Smart Trips & Energy Routing */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-          <div className="lg:col-span-6 space-y-4">
-            <div className="w-10 h-10 rounded-2xl bg-sky-500 text-white flex items-center justify-center font-bold shadow-sm">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          
+          {/* Pillar 1: VoltMap */}
+          <Link
+            to="/explore"
+            className="vc-card p-6 bg-white border border-slate-200/90 shadow-card hover:shadow-card-hover hover:border-sky-500/80 transition-all space-y-4 group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-600 group-hover:scale-110 transition-transform">
+              <MapPin className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-heading text-lg font-extrabold text-navy-900 group-hover:text-sky-600 transition-colors">
+                VoltMap Network
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                Live interactive radar covering 1,771+ high-power DC fast charging hubs across 703 Indian cities.
+              </p>
+            </div>
+            <div className="text-xs font-bold text-sky-600 flex items-center gap-1 pt-2">
+              <span>View Map</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </div>
+          </Link>
+
+          {/* Pillar 2: VoltTrip */}
+          <Link
+            to="/trips"
+            className="vc-card p-6 bg-white border border-slate-200/90 shadow-card hover:shadow-card-hover hover:border-teal-500/80 transition-all space-y-4 group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-600 group-hover:scale-110 transition-transform">
               <Navigation className="w-5 h-5" />
             </div>
-            <h3 className="font-heading text-2xl font-extrabold text-navy-900">
-              Smart Journey & Energy Planner
-            </h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Calculates route distance against your active battery capacity, terrain factors, and required intermediate fast-charging waypoints with target arrival SOC buffers.
-            </p>
-            <Link to="/explore" className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-600 hover:underline pt-1">
-              <span>View Route Intelligence</span> <ChevronRight className="w-4 h-4" />
-            </Link>
-          </div>
-
-          <div className="lg:col-span-6 vc-card p-6 bg-slate-50 border-slate-200 space-y-3">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Route Energy Calculation Showcase</div>
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 rounded-xl bg-white border border-slate-200">
-                <span className="text-[9px] text-slate-400 uppercase font-bold block">Distance</span>
-                <span className="font-extrabold text-navy-900 text-sm">275 km</span>
-              </div>
-              <div className="p-3 rounded-xl bg-white border border-slate-200">
-                <span className="text-[9px] text-slate-400 uppercase font-bold block">Arrival SOC</span>
-                <span className="font-extrabold text-emerald-600 text-sm">45% Target</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Feature Split 2: VoltHealth & VoltCare */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center lg:flex-row-reverse">
-          <div className="lg:col-span-6 lg:order-2 space-y-4">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center font-bold shadow-sm">
-              <Activity className="w-5 h-5" />
-            </div>
-            <h3 className="font-heading text-2xl font-extrabold text-navy-900">
-              VoltHealth & VoltCare Maintenance
-            </h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Track battery SOH degradation profiles and initiate progressive service request setup connected to assigned field technicians and certified service partners.
-            </p>
-            <Link to="/explore" className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:underline pt-1">
-              <span>Explore Vehicle Care</span> <ChevronRight className="w-4 h-4" />
-            </Link>
-          </div>
-
-          <div className="lg:col-span-6 lg:order-1 vc-card p-6 bg-slate-50 border-slate-200 space-y-3">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Battery SOH & Maintenance Pipeline</div>
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 rounded-xl bg-white border border-slate-200">
-                <span className="text-[9px] text-slate-400 uppercase font-bold block">Modelled SOH</span>
-                <span className="font-extrabold text-emerald-600 text-sm">98% Rating</span>
-              </div>
-              <div className="p-3 rounded-xl bg-white border border-slate-200">
-                <span className="text-[9px] text-slate-400 uppercase font-bold block">Service Lifecycle</span>
-                <span className="font-extrabold text-navy-900 text-sm">State Machine</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Feature Split 3: VoltAI & VoltInsight */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-          <div className="lg:col-span-6 space-y-4">
-            <div className="w-10 h-10 rounded-2xl bg-navy-900 text-white flex items-center justify-center font-bold shadow-sm">
-              <Sparkles className="w-5 h-5 text-sky-400" />
-            </div>
-            <h3 className="font-heading text-2xl font-extrabold text-navy-900">
-              VoltAI Copilot & VoltInsight Analytics
-            </h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Context-aware assistant aware of your vehicle specs, SOC %, and real-time charging network, paired with transparent Wh/km efficiency and VoltScore composite breakdowns.
-            </p>
-          </div>
-
-          <div className="lg:col-span-6 vc-card p-6 bg-slate-900 text-white space-y-3">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data-Grounded Copilot Response</div>
-            <div className="p-3 rounded-xl bg-slate-800 border border-slate-700 text-xs space-y-1">
-              <div className="font-bold text-sky-400 flex items-center gap-1.5">
-                <Bot className="w-4 h-4" /> VoltAI Response
-              </div>
-              <p className="text-slate-300 text-[11px]">
-                Recommended station: VoltConnect Hub Gachibowli (2.4 km away, ₹18/kWh). 3 CCS2 ports open.
+            <div className="space-y-1">
+              <h3 className="font-heading text-lg font-extrabold text-navy-900 group-hover:text-teal-600 transition-colors">
+                Smart Trip Planner
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                Corridor charging intelligence, sequential reachability analysis, and FASTag toll expense estimation.
               </p>
             </div>
-          </div>
+            <div className="text-xs font-bold text-teal-600 flex items-center gap-1 pt-2">
+              <span>Plan Journey</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </div>
+          </Link>
+
+          {/* Pillar 3: VoltHealth */}
+          <Link
+            to="/health"
+            className="vc-card p-6 bg-white border border-slate-200/90 shadow-card hover:shadow-card-hover hover:border-emerald-500/80 transition-all space-y-4 group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform">
+              <Activity className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-heading text-lg font-extrabold text-navy-900 group-hover:text-emerald-600 transition-colors">
+                VoltHealth SOH
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                Real-time battery State of Health diagnostics, cell degradation tracking, and range efficiency telemetry.
+              </p>
+            </div>
+            <div className="text-xs font-bold text-emerald-600 flex items-center gap-1 pt-2">
+              <span>Run Diagnostics</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </div>
+          </Link>
+
+          {/* Pillar 4: VoltAI */}
+          <Link
+            to="/volt-ai"
+            className="vc-card p-6 bg-white border border-slate-200/90 shadow-card hover:shadow-card-hover hover:border-sky-500/80 transition-all space-y-4 group"
+          >
+            <div className="w-10 h-10 rounded-xl bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-600 group-hover:scale-110 transition-transform">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-heading text-lg font-extrabold text-navy-900 group-hover:text-sky-600 transition-colors">
+                VoltAI Copilot
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                Contextual EV assistant answering real-time questions about your vehicle, tariffs, and route planning.
+              </p>
+            </div>
+            <div className="text-xs font-bold text-sky-600 flex items-center gap-1 pt-2">
+              <span>Ask VoltAI</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </div>
+          </Link>
+
         </div>
 
       </section>
 
-      {/* 4. FINAL PUBLIC CALL-TO-ACTION */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <div className="vc-card p-10 lg:p-14 bg-gradient-to-r from-navy-950 via-navy-900 to-navy-950 text-white rounded-3xl space-y-6 shadow-xl relative overflow-hidden">
-          <h2 className="font-heading text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
-            Ready to experience connected electric mobility?
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-xl mx-auto">
-            Join VoltConnect today to discover charging, plan energy-aware journeys, and manage your complete EV experience.
-          </p>
+      {/* =========================================================================
+          4. FINAL CONVERGENCE CALL TO ACTION
+          ========================================================================= */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="p-8 sm:p-14 rounded-3xl bg-gradient-to-r from-slate-900 via-navy-900 to-slate-950 text-white border border-slate-800 shadow-2xl relative overflow-hidden text-center space-y-6">
+          
+          <div className="max-w-2xl mx-auto space-y-3">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold uppercase tracking-wider">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>READY FOR THE ROAD</span>
+            </div>
+
+            <h2 className="font-heading text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+              Start Your Intelligent EV Journey Today
+            </h2>
+
+            <p className="text-sm sm:text-base text-slate-300 font-medium">
+              Join thousands of electric vehicle drivers navigating India with zero range anxiety and full voice automation.
+            </p>
+          </div>
+
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
             <Link
               to="/signup"
-              className="vc-btn vc-btn-teal py-3.5 px-8 text-sm font-extrabold shadow-md hover:scale-[1.02] transition-all w-full sm:w-auto"
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-heading font-extrabold text-sm tracking-wide shadow-lg hover:shadow-glow-volt transition-all flex items-center justify-center gap-2"
             >
-              GET STARTED NOW
+              <span>CREATE DRIVER ACCOUNT</span>
+              <ArrowRight className="w-4 h-4" />
             </Link>
+
             <Link
               to="/login"
-              className="vc-btn vc-btn-secondary-dark py-3.5 px-8 text-sm font-extrabold w-full sm:w-auto"
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-heading font-bold text-sm border border-slate-700 transition-all flex items-center justify-center gap-2"
             >
-              Sign In to Account
+              <span>SIGN IN TO DASHBOARD</span>
             </Link>
           </div>
+
         </div>
       </section>
 
