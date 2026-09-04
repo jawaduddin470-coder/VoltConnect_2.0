@@ -33,11 +33,20 @@ export function getAuthErrorMessage(error: any): string {
     return 'Google Sign-In was restricted by browser cross-site tracking settings. Please use Email & Password authentication below or allow 3rd-party cookies for this site.';
   }
 
+  if (
+    message.includes('requests-from-referer') ||
+    message.includes('API_KEY_HTTP_REFERRER_BLOCKED') ||
+    code === 'auth/requests-from-referer-<empty>-are-blocked'
+  ) {
+    return 'Authentication service network restrictions blocked this origin. Please check Firebase domain configuration.';
+  }
+
   switch (code) {
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
-    case 'auth/user-not-found':
       return 'Invalid email address or password. Please check your credentials and try again.';
+    case 'auth/user-not-found':
+      return 'No registered account found with this email address. Please check your email or contact support.';
     case 'auth/email-already-in-use':
       return 'An account with this email address already exists. Please sign in instead.';
     case 'auth/invalid-email':

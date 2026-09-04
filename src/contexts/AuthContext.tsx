@@ -250,8 +250,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const fbUser = await loginWithFirebase(email, pass);
       let profile = await fetchUserProfile(fbUser.uid);
       if (!profile) {
-        // If attempting to log into a restricted portal without a pre-existing profile, reject
+        // If attempting to log into a restricted portal without a pre-existing profile, reject and clear auth session
         if (role && role !== 'driver') {
+          await logoutFirebase().catch(() => {});
+          setUser(null);
+          localStorage.removeItem('vc_user');
           throw new Error(`Unauthorized: No registered ${role} profile found for this account.`);
         }
         profile = {
@@ -269,6 +272,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         // Check account suspension status
         if (profile.status === 'SUSPENDED') {
+          await logoutFirebase().catch(() => {});
+          setUser(null);
+          localStorage.removeItem('vc_user');
           throw new Error('This account has been suspended by administration. Please contact support.');
         }
 
@@ -281,6 +287,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             (role === 'technician' && (profile.role === 'admin' || profile.role === 'super_admin'));
 
           if (!isAllowed) {
+            await logoutFirebase().catch(() => {});
+            setUser(null);
+            localStorage.removeItem('vc_user');
             throw new Error(`Unauthorized: User role '${profile.role}' does not have '${role}' access privileges.`);
           }
         }
@@ -291,7 +300,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(profile);
       return profile;
     } catch (err: any) {
-      const friendlyMsg = getAuthErrorMessage(err);
+      const rawMsg = err?.message || '';
+      const friendlyMsg = rawMsg.startsWith('Unauthorized:') || rawMsg.includes('suspended')
+        ? rawMsg
+        : getAuthErrorMessage(err);
       console.error('[AuthContext] Login error:', err);
       throw new Error(friendlyMsg);
     } finally {

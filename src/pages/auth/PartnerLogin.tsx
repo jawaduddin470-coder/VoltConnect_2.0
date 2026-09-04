@@ -11,18 +11,59 @@ export const PartnerLogin: React.FC = () => {
   const [email, setEmail] = useState('alex@voltcharge.com');
   const [password, setPassword] = useState('password123');
   const [loading, setLoading] = useState(false);
-  const [accessDenied, setAccessDenied] = useState(false);
+  const [authError, setAuthError] = useState<{
+    title: string;
+    description: string;
+    type: 'CREDENTIALS' | 'NOT_FOUND' | 'UNAUTHORIZED' | 'MISSING_PROFILE' | 'SUSPENDED' | 'NETWORK';
+  } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setAccessDenied(false);
+    setAuthError(null);
 
     try {
       await login(email, password, 'partner');
       navigate('/partner/dashboard');
-    } catch (err) {
-      setAccessDenied(true);
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (msg.includes('does not have \'partner\' access privileges') || msg.includes('privileges')) {
+        setAuthError({
+          type: 'UNAUTHORIZED',
+          title: 'Unauthorized Account Role',
+          description: 'Authenticated successfully, but this account is not authorized for the CPO Partner Portal.',
+        });
+      } else if (msg.includes('No registered partner profile found') || msg.includes('profile found')) {
+        setAuthError({
+          type: 'MISSING_PROFILE',
+          title: 'Partner Profile Missing',
+          description: 'Authenticated account does not have a CPO partner profile registered in Firestore.',
+        });
+      } else if (msg.includes('No registered account') || msg.includes('user-not-found') || msg.includes('No account found')) {
+        setAuthError({
+          type: 'NOT_FOUND',
+          title: 'Account Not Found',
+          description: 'No partner account found with this email. Please contact VoltConnect admin to register.',
+        });
+      } else if (msg.includes('suspended')) {
+        setAuthError({
+          type: 'SUSPENDED',
+          title: 'Account Suspended',
+          description: 'This partner account has been deactivated by administration.',
+        });
+      } else if (msg.includes('network') || msg.includes('Network') || msg.includes('offline') || msg.includes('restrictions') || msg.includes('blocked')) {
+        setAuthError({
+          type: 'NETWORK',
+          title: 'Connection / Service Error',
+          description: 'Unable to reach authentication services. Please check network connectivity or Firebase configuration.',
+        });
+      } else {
+        setAuthError({
+          type: 'CREDENTIALS',
+          title: 'Invalid Credentials',
+          description: 'Invalid partner corporate email or password. Please verify credentials.',
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -56,17 +97,19 @@ export const PartnerLogin: React.FC = () => {
           <p className="text-xs text-slate-400">Charging Network Operations. Authenticate with CPO partner credentials.</p>
         </div>
 
-        {accessDenied && (
+        {authError && (
           <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold space-y-2 animate-in fade-in">
             <div className="flex items-center gap-2 font-bold text-rose-400">
-              <ShieldAlert className="w-4 h-4" /> Partner Access Required
+              <ShieldAlert className="w-4 h-4 shrink-0" /> {authError.title}
             </div>
-            <p className="text-[11px] text-slate-300">
-              Your account credentials or role claims do not grant CPO Partner privileges. Access has been restricted.
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              {authError.description}
             </p>
-            <Link to="/dashboard" className="vc-btn vc-btn-secondary-dark py-1.5 px-3 text-[11px] font-bold inline-block mt-1">
-              Return to VoltConnect
-            </Link>
+            {authError.type === 'UNAUTHORIZED' && (
+              <Link to="/dashboard" className="vc-btn vc-btn-secondary-dark py-1.5 px-3 text-[11px] font-bold inline-block mt-1">
+                Return to VoltConnect Driver Dashboard
+              </Link>
+            )}
           </div>
         )}
 

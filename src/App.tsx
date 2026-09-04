@@ -323,6 +323,7 @@ export const App: React.FC = () => {
           />
 
           {/* Admin Console Protected Routes */}
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route
             path="/admin/*"
             element={
