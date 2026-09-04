@@ -232,7 +232,7 @@ export const ExplorePage: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-3">
             
             {/* Search Input */}
-            <div className="relative flex-1 min-w-[240px]">
+            <div className="relative w-full sm:w-auto sm:flex-1 min-w-0 sm:min-w-[200px]">
               <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
               <input
                 type="text"
@@ -331,11 +331,11 @@ export const ExplorePage: React.FC = () => {
           </div>
 
           {/* Row 2: Quick Filter Chips & Dataset Counts */}
-          <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1 border-t border-slate-100">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 text-xs pt-1 border-t border-slate-100">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 max-w-full">
               <button
                 onClick={() => setFilterWithinRange(!filterWithinRange)}
-                className={`px-3 py-1 rounded-lg border font-bold transition-all ${
+                className={`px-3 py-1 rounded-lg border font-bold transition-all shrink-0 ${
                   filterWithinRange
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                     : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
@@ -346,7 +346,7 @@ export const ExplorePage: React.FC = () => {
 
               <button
                 onClick={() => setFilterCompatible(!filterCompatible)}
-                className={`px-3 py-1 rounded-lg border font-bold transition-all ${
+                className={`px-3 py-1 rounded-lg border font-bold transition-all shrink-0 ${
                   filterCompatible
                     ? 'bg-sky-50 text-sky-700 border-sky-300'
                     : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
@@ -356,7 +356,7 @@ export const ExplorePage: React.FC = () => {
               </button>
               <button
                 onClick={() => setFilterAvailable(!filterAvailable)}
-                className={`px-3 py-1 rounded-lg border font-bold transition-all ${
+                className={`px-3 py-1 rounded-lg border font-bold transition-all shrink-0 ${
                   filterAvailable
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                     : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
@@ -366,7 +366,7 @@ export const ExplorePage: React.FC = () => {
               </button>
               <button
                 onClick={() => setFilterFastCharging(!filterFastCharging)}
-                className={`px-3 py-1 rounded-lg border font-bold transition-all ${
+                className={`px-3 py-1 rounded-lg border font-bold transition-all shrink-0 ${
                   filterFastCharging
                     ? 'bg-amber-50 text-amber-700 border-amber-300'
                     : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
@@ -376,7 +376,7 @@ export const ExplorePage: React.FC = () => {
               </button>
               <button
                 onClick={() => setFilterVerifiedOnly(!filterVerifiedOnly)}
-                className={`px-3 py-1 rounded-lg border font-bold transition-all ${
+                className={`px-3 py-1 rounded-lg border font-bold transition-all shrink-0 ${
                   filterVerifiedOnly
                     ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
                     : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
@@ -386,7 +386,7 @@ export const ExplorePage: React.FC = () => {
               </button>
             </div>
 
-            <div className="font-mono text-slate-500 font-bold">
+            <div className="font-mono text-slate-500 font-bold text-[11px] sm:text-xs">
               Showing <span className="text-sky-600 font-extrabold">{sortedRanked.length}</span> of {stations.length} Hubs
             </div>
           </div>

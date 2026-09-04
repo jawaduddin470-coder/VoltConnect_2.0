@@ -99,8 +99,8 @@ export const AddVehicleModal: React.FC<AddVehicleModalProps> = ({ onClose }) => 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/70 backdrop-blur-sm vc-modal-backdrop">
-      <div className="vc-card w-full max-w-xl p-6 sm:p-8 space-y-6 shadow-2xl relative border-slate-200 vc-modal-content">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-navy-950/70 backdrop-blur-sm vc-modal-backdrop">
+      <div className="vc-card w-full max-w-xl max-h-[90vh] overflow-y-auto p-4 sm:p-8 space-y-6 shadow-2xl relative border-slate-200 vc-modal-content">
         
         {/* Header Bar */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">

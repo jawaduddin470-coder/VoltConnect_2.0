@@ -5,12 +5,12 @@ import { Linkedin, ExternalLink, ShieldCheck } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="w-full bg-navy-950 text-slate-300 pt-16 pb-8 border-t border-slate-800/80">
+    <footer className="w-full bg-navy-950 text-slate-300 pt-12 sm:pt-16 pb-28 sm:pb-32 lg:pb-8 border-t border-slate-800/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 pb-12 border-b border-slate-800">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-8 pb-12 border-b border-slate-800">
           
           {/* Column 1: Brand & Slogan */}
-          <div className="col-span-2 space-y-4 pr-4">
+          <div className="col-span-1 sm:col-span-2 space-y-4 pr-0 sm:pr-4">
             <div className="flex items-center gap-3">
               <VoltConnectLogo variant="footer" />
             </div>

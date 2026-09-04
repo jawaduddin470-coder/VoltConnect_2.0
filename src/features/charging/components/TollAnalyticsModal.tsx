@@ -14,13 +14,13 @@ export const TollAnalyticsModal: React.FC<TollAnalyticsModalProps> = ({ tripPlan
   const destName = waypoints[waypoints.length - 1]?.name.split(',')[0] || 'Destination';
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="max-w-2xl w-full bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 font-sans">
+    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+      <div className="max-w-2xl w-full bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[88vh] animate-in zoom-in-95 duration-200 font-sans">
         
         {/* Modal Header */}
-        <div className="bg-slate-900 text-white px-6 py-5 flex items-center justify-between border-b border-slate-800 shrink-0">
+        <div className="bg-slate-900 text-white px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between border-b border-slate-800 shrink-0 gap-2">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-extrabold uppercase text-sky-400 font-mono tracking-wider">
                 JOURNEY COST INTELLIGENCE BREAKDOWN
               </span>
@@ -32,25 +32,25 @@ export const TollAnalyticsModal: React.FC<TollAnalyticsModalProps> = ({ tripPlan
                 {costSummary.dataConfidence === 'HIGH_CONFIDENCE' ? 'Verified Tariffs + FASTag' : 'Estimated Tariff Data'}
               </span>
             </div>
-            <h2 className="font-heading text-lg font-extrabold text-white mt-1">
+            <h2 className="font-heading text-base sm:text-lg font-extrabold text-white mt-1">
               {originName} ➔ {destName} ({totalRoadDistanceKm} km)
             </h2>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            className="p-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body - Scrollable */}
-        <div className="p-6 overflow-y-auto space-y-6 text-slate-900">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 text-slate-900">
           
           {/* Section 1: Primary Journey Cost Card & Metric Badges */}
-          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 shadow-xs">
-            <div className="flex items-center justify-between">
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <span className="text-[10px] font-extrabold uppercase text-slate-400 font-mono tracking-wider">
                   TOTAL ESTIMATED JOURNEY COST

@@ -163,19 +163,19 @@ export const VoltAIPage: React.FC = () => {
     <div className="space-y-8 pb-16 max-w-5xl mx-auto vc-page-enter">
       
       {/* 1. COPILOT HERO HEADER */}
-      <div className="p-8 sm:p-10 rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden vc-trans-voltai">
+      <div className="p-5 sm:p-10 rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 relative overflow-hidden vc-trans-voltai">
         <div className="space-y-2 max-w-xl">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="vc-badge vc-badge-teal text-[10px] uppercase font-bold">CONTEXTUAL EV ASSISTANT</span>
             {activeVehicle && (
-              <span className="vc-badge vc-badge-navy text-[10px] uppercase font-extrabold text-sky-400 border-sky-500/30">
+              <span className="vc-badge vc-badge-navy text-[10px] uppercase font-extrabold text-sky-400 border-sky-500/30 truncate max-w-[260px] sm:max-w-none">
                 CONTEXT: {activeVehicle.manufacturer} {activeVehicle.model} ({activeVehicle.currentBatteryPercent || 85}% SOC)
               </span>
             )}
           </div>
 
-          <h1 className="font-heading text-3xl sm:text-4xl font-extrabold tracking-tight text-white flex items-center gap-2">
-            <Sparkles className="w-7 h-7 text-sky-400" /> VOLT AI ASSISTANT
+          <h1 className="font-heading text-2xl sm:text-4xl font-extrabold tracking-tight text-white flex items-center gap-2">
+            <Sparkles className="w-6 h-6 sm:w-7 sm:h-7 text-sky-400 shrink-0" /> VOLT AI ASSISTANT
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-300">
@@ -276,12 +276,12 @@ export const VoltAIPage: React.FC = () => {
       </div>
 
       {/* 4. CHAT HISTORY DISPLAY AREA */}
-      <div className="vc-card p-6 bg-white border border-slate-200 rounded-3xl space-y-6 shadow-xs min-h-[380px]">
-        <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+      <div className="vc-card p-4 sm:p-6 bg-white border border-slate-200 rounded-3xl space-y-4 sm:space-y-6 shadow-xs min-h-[380px]">
+        <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 sm:pr-2">
           {cards.map(card => (
             <div
               key={card.id}
-              className={`flex gap-3 text-xs ${card.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex gap-2 sm:gap-3 text-xs ${card.sender === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               {card.sender === 'ai' && (
                 <div className="w-8 h-8 rounded-full bg-slate-900 text-sky-400 flex items-center justify-center shrink-0 border border-slate-800">
@@ -290,7 +290,7 @@ export const VoltAIPage: React.FC = () => {
               )}
 
               <div
-                className={`p-4 rounded-2xl max-w-xl space-y-2 shadow-xs ${
+                className={`p-3.5 sm:p-4 rounded-2xl max-w-[88%] sm:max-w-xl space-y-2 shadow-xs ${
                   card.sender === 'user'
                     ? 'bg-slate-900 text-white font-semibold rounded-tr-none'
                     : 'bg-slate-50 border border-slate-200 text-slate-800 rounded-tl-none'
@@ -346,14 +346,14 @@ export const VoltAIPage: React.FC = () => {
           e.preventDefault();
           handleQuery(inputQuery);
         }}
-        className="flex items-center gap-2 sm:gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-md"
+        className="flex items-center gap-2 sm:gap-3 bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200 shadow-md"
       >
         <input
           type="text"
           value={inputQuery}
           onChange={e => setInputQuery(e.target.value)}
           placeholder="Ask VoltAI: 'Where should I charge?' or 'Can I reach Vijayawada?'..."
-          className="flex-1 px-4 py-2.5 text-xs font-semibold text-navy-900 focus:outline-none bg-transparent"
+          className="flex-1 px-3 sm:px-4 py-2.5 text-xs font-semibold text-navy-900 focus:outline-none bg-transparent min-w-0"
         />
 
         {/* Voice Dictation Button */}
@@ -383,7 +383,7 @@ export const VoltAIPage: React.FC = () => {
               console.warn('[VoltAI Voice] Voice dictation start error:', err);
             }
           }}
-          className="p-2.5 rounded-xl text-slate-500 hover:text-sky-600 hover:bg-sky-50 border border-slate-200 transition-colors"
+          className="min-h-[44px] min-w-[44px] p-2.5 rounded-xl text-slate-500 hover:text-sky-600 hover:bg-sky-50 border border-slate-200 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
           title="Voice Ask"
         >
           <Mic className="w-4 h-4" />
@@ -392,7 +392,7 @@ export const VoltAIPage: React.FC = () => {
         <button
           type="submit"
           disabled={!inputQuery.trim() || isThinking}
-          className="vc-btn vc-btn-teal py-2.5 px-5 text-xs font-extrabold flex items-center gap-1.5 shadow-md disabled:opacity-50 shrink-0"
+          className="vc-btn vc-btn-teal min-h-[44px] py-2.5 px-4 sm:px-5 text-xs font-extrabold flex items-center gap-1.5 shadow-md disabled:opacity-50 shrink-0 cursor-pointer"
         >
           <span>ASK</span>
           <Send className="w-3.5 h-3.5" />

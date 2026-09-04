@@ -127,7 +127,7 @@ export const VoiceNavigationControl: React.FC<VoiceNavigationControlProps> = ({
 
       {/* 2. REAL-TIME LIVE TRANSCRIPT & FEEDBACK HUD OVERLAY */}
       {(status === 'LISTENING' || status === 'PROCESSING' || status === 'INTENT_DETECTED' || status === 'EXECUTING' || status === 'NAVIGATING' || status === 'ERROR') && (
-        <div className="absolute top-full right-0 mt-2 z-50 w-72 sm:w-84 bg-slate-950/95 border border-slate-700/80 rounded-2xl shadow-2xl p-3.5 text-white backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
+        <div className="absolute top-full right-0 mt-2 z-50 w-[calc(100vw-32px)] sm:w-84 max-w-sm bg-slate-950/95 border border-slate-700/80 rounded-2xl shadow-2xl p-3.5 text-white backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
           
           <div className="flex items-center justify-between pb-2 border-b border-slate-800">
             <div className="flex items-center gap-2">
@@ -201,7 +201,7 @@ export const VoiceNavigationControl: React.FC<VoiceNavigationControlProps> = ({
 
       {/* 3. VOICE COMMANDS CHEAT SHEET / HELP MODAL POPOVER */}
       {showHelp && (
-        <div className="absolute top-full right-0 mt-2 z-50 w-80 sm:w-96 bg-white rounded-2xl shadow-card-hover border border-slate-200 p-4 z-50 animate-in fade-in slide-in-from-top-2 text-left">
+        <div className="absolute top-full right-0 mt-2 z-50 w-[calc(100vw-32px)] sm:w-96 max-w-sm max-h-[80vh] overflow-y-auto bg-white rounded-2xl shadow-card-hover border border-slate-200 p-4 animate-in fade-in slide-in-from-top-2 text-left">
           
           <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
             <div className="flex items-center gap-2">

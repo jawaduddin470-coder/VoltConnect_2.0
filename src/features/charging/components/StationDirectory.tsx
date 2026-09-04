@@ -144,7 +144,7 @@ export const StationDirectory: React.FC<StationDirectoryProps> = ({
                 <div
                   key={station.id}
                   onClick={() => onSelectStation(station)}
-                  className={`bg-white rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col justify-between p-5 relative ${
+                  className={`bg-white rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col justify-between p-4 sm:p-5 relative ${
                     isSelected
                       ? 'border-sky-500 ring-2 ring-sky-400/30 shadow-lg scale-[1.01]'
                       : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
@@ -259,7 +259,7 @@ export const StationDirectory: React.FC<StationDirectoryProps> = ({
                         e.stopPropagation();
                         onViewOnMap(station);
                       }}
-                      className="flex-1 py-2 px-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <MapIcon className="w-3.5 h-3.5 text-sky-600" />
                       <span>View on Map</span>
@@ -267,7 +267,7 @@ export const StationDirectory: React.FC<StationDirectoryProps> = ({
 
                     <button
                       onClick={e => handlePlanTrip(station, e)}
-                      className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                      className="min-h-[44px] py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 transition-colors shadow-xs cursor-pointer shrink-0"
                     >
                       <Navigation className="w-3.5 h-3.5 text-sky-400" />
                       <span>Plan Trip</span>

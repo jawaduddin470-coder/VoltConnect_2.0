@@ -490,29 +490,29 @@ export const SmartTripPlanner: React.FC = () => {
       
       {/* 1. TOP HEADER & ACTIVE VEHICLE / STARTING SOC CONTROL BADGE */}
       <div className="bg-white border-b border-slate-200 sticky top-16 z-30 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h1 className="font-heading text-xl font-extrabold text-slate-900 flex items-center gap-2">
-              <Navigation className="w-5 h-5 text-sky-500" /> VoltTrip EV Route Planning Engine
+            <h1 className="font-heading text-lg sm:text-xl font-extrabold text-slate-900 flex items-center gap-2">
+              <Navigation className="w-5 h-5 text-sky-500 shrink-0" /> VoltTrip EV Route Planning Engine
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
               Vehicle-aware highway journey routing, toll intelligence & corridor charger discovery
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             <button
               onClick={() => setShowVehicleModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-extrabold flex items-center gap-2 shadow-xs cursor-pointer"
+              className="flex-1 sm:flex-initial min-h-[40px] px-3.5 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-extrabold flex items-center justify-center gap-2 shadow-xs cursor-pointer"
             >
-              <Car className="w-3.5 h-3.5 text-sky-400" />
-              <span>{activeVehicle ? `${activeVehicle.manufacturer} ${activeVehicle.model}` : 'Select Vehicle'}</span>
+              <Car className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span className="truncate max-w-[150px] sm:max-w-none">{activeVehicle ? `${activeVehicle.manufacturer} ${activeVehicle.model}` : 'Select Vehicle'}</span>
             </button>
 
             {/* Authoritative Global Starting Battery SOC Selector */}
-            <div className="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-xl border border-slate-800 text-xs font-bold shadow-xs">
-              <Battery className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Starting SOC:</span>
+            <div className="flex-1 sm:flex-initial min-h-[40px] flex items-center justify-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-xl border border-slate-800 text-xs font-bold shadow-xs">
+              <Battery className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="text-[11px] sm:text-xs">SOC:</span>
               <select
                 value={activeVehicle?.currentBatteryPercent || 85}
                 onChange={e => updateActiveVehicleSOC(Number(e.target.value))}
@@ -526,9 +526,9 @@ export const SmartTripPlanner: React.FC = () => {
               </select>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
-              <ShieldCheck className="w-3.5 h-3.5 text-sky-500" />
-              <span>Safety Reserve:</span>
+            <div className="flex-1 sm:flex-initial min-h-[40px] flex items-center justify-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
+              <ShieldCheck className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+              <span className="text-[11px] sm:text-xs">Reserve:</span>
               <select
                 value={safetyReservePercent}
                 onChange={e => setSafetyReservePercent(Number(e.target.value))}
@@ -544,9 +544,9 @@ export const SmartTripPlanner: React.FC = () => {
             {tripPlan && (
               <button
                 onClick={() => setShowModifyForm(!showModifyForm)}
-                className="px-3.5 py-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-extrabold flex items-center gap-1.5 border border-sky-200 cursor-pointer"
+                className="w-full sm:w-auto min-h-[40px] px-3.5 py-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-extrabold flex items-center justify-center gap-1.5 border border-sky-200 cursor-pointer"
               >
-                <Edit2 className="w-3.5 h-3.5 text-sky-600" />
+                <Edit2 className="w-3.5 h-3.5 text-sky-600 shrink-0" />
                 <span>{showModifyForm ? 'Close Form' : 'MODIFY DESTINATIONS'}</span>
                 {showModifyForm ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               </button>
@@ -663,13 +663,13 @@ export const SmartTripPlanner: React.FC = () => {
 
       {/* 2. INITIAL EMPTY DESTINATION PLANNING STATE */}
       {!tripPlan && (
-        <div className="max-w-3xl mx-auto w-full my-auto py-10 px-4 space-y-8 animate-in fade-in zoom-in-95">
+        <div className="max-w-3xl mx-auto w-full my-auto py-6 sm:py-10 px-3 sm:px-4 space-y-6 sm:space-y-8 animate-in fade-in zoom-in-95">
           
           <div className="text-center space-y-3">
-            <div className="w-16 h-16 rounded-3xl bg-sky-500/10 text-sky-600 flex items-center justify-center mx-auto border border-sky-200 shadow-inner">
-              <Navigation className="w-8 h-8" />
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-3xl bg-sky-500/10 text-sky-600 flex items-center justify-center mx-auto border border-sky-200 shadow-inner">
+              <Navigation className="w-7 h-7 sm:w-8 sm:h-8" />
             </div>
-            <h2 className="font-heading text-2xl sm:text-3xl font-black text-slate-900">
+            <h2 className="font-heading text-xl sm:text-3xl font-black text-slate-900">
               Where are you traveling with your EV?
             </h2>
             <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
@@ -678,7 +678,7 @@ export const SmartTripPlanner: React.FC = () => {
           </div>
 
           {/* Clean Destination Entry Form Container */}
-          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xl space-y-5">
+          <div className="bg-white p-4 sm:p-8 rounded-3xl border border-slate-200 shadow-xl space-y-4 sm:space-y-5">
             
             {planError && (
               <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-3">
@@ -799,7 +799,7 @@ export const SmartTripPlanner: React.FC = () => {
             <span className="text-[10px] font-extrabold uppercase text-slate-400 font-mono tracking-wider block text-center">
               POPULAR EV CORRIDOR SHORTCUTS
             </span>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 onClick={() => {
                   setWaypoints([
@@ -859,7 +859,9 @@ export const SmartTripPlanner: React.FC = () => {
 
       {/* 3. MAP REVEAL VIEWPORT (SHOWN ONLY AFTER DESTINATION SUBMITTED & ROUTE CALCULATED) */}
       {tripPlan && (
-        <div className="flex-1 relative w-full h-[calc(100vh-160px)] min-h-[550px] overflow-hidden">
+        <>
+          {/* 3A. DESKTOP VIEWPORT (≥ 1024px) — 100% VISUALLY PRESERVED */}
+          <div className="hidden lg:block flex-1 relative w-full h-[calc(100vh-160px)] min-h-[550px] overflow-hidden">
           
           {/* Interactive Dedicated Leaflet Map Component */}
           <TripMap
@@ -1180,7 +1182,329 @@ export const SmartTripPlanner: React.FC = () => {
 
           </div>
         </div>
-      )}
+
+        {/* 3B. MOBILE & TABLET SINGLE-COLUMN VIEWPORT (< 1024px) */}
+        <div className="block lg:hidden w-full max-w-2xl mx-auto px-3 sm:px-4 space-y-4 pb-12">
+          
+          {/* Route Deviation Warning Banner */}
+          {routeDeviated && (
+            <div className="w-full bg-amber-500 text-white p-3 rounded-2xl shadow-lg flex items-center justify-between text-xs font-extrabold animate-bounce">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>Route Deviation Detected</span>
+              </div>
+              <button
+                onClick={() => handlePlanJourney()}
+                className="px-3 py-1 bg-slate-900 text-white rounded-xl text-[11px] shrink-0 cursor-pointer"
+              >
+                Recalculate
+              </button>
+            </div>
+          )}
+
+          {/* Embedded Top Interactive Map Component */}
+          <div className="relative w-full h-[290px] sm:h-[380px] rounded-3xl overflow-hidden border border-slate-200 shadow-md">
+            <TripMap
+              tripPlan={tripPlan}
+              selectedStop={selectedStop}
+              onSelectStop={st => setSelectedStop(st)}
+              isLiveTracking={isLiveTracking}
+              userLat={userLat}
+              userLng={userLng}
+              accuracy={accuracy}
+              followMe={followMe}
+              onDisableFollowMe={() => setFollowMe(false)}
+              showChargers={showChargersOnMap}
+              showTolls={showTollsOnMap}
+            />
+
+            {/* Floating map controls inside map viewport top-right */}
+            <div className="absolute top-2.5 right-2.5 z-20 flex flex-col items-end gap-1.5">
+              <button
+                onClick={() => {
+                  setIsLiveTracking(!isLiveTracking);
+                  if (!isLiveTracking) requestLocation();
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-md border transition-all cursor-pointer ${
+                  isLiveTracking
+                    ? 'bg-sky-500 text-white border-sky-600 ring-2 ring-sky-300'
+                    : 'bg-white/95 backdrop-blur-md text-slate-800 border-slate-200'
+                }`}
+              >
+                <Radio className={`w-3.5 h-3.5 ${isLiveTracking ? 'animate-pulse' : ''}`} />
+                <span>{isLiveTracking ? 'LIVE' : 'Track'}</span>
+              </button>
+
+              <div className="bg-white/95 backdrop-blur-md p-1 rounded-xl border border-slate-200 shadow-md flex items-center gap-1 text-[11px] font-extrabold">
+                <button
+                  onClick={() => setShowChargersOnMap(!showChargersOnMap)}
+                  className={`px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                    showChargersOnMap ? 'bg-sky-500 text-white shadow-2xs' : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  <span>⚡ Chargers</span>
+                </button>
+                <button
+                  onClick={() => setShowTollsOnMap(!showTollsOnMap)}
+                  className={`px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                    showTollsOnMap ? 'bg-amber-500 text-white shadow-2xs' : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  <span>🛣️ Tolls ({tripPlan.tollSummary.tollPlazaCount})</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Stacked Journey Details Container */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-4 sm:p-6 space-y-4 font-sans">
+            
+            {/* Header: EV Journey Summary */}
+            <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase text-sky-600 font-mono tracking-wider">
+                  EV JOURNEY SUMMARY
+                </span>
+                <h3 className="font-heading text-base sm:text-lg font-extrabold text-slate-900 leading-tight mt-0.5">
+                  {tripPlan.waypoints[0].name.split(',')[0]} → {tripPlan.waypoints[tripPlan.waypoints.length - 1].name.split(',')[0]}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowModifyForm(true)}
+                className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:text-slate-900 flex items-center gap-1 text-xs font-bold cursor-pointer"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                <span>Edit</span>
+              </button>
+            </div>
+
+            {/* Estimated Journey Cost Card */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold uppercase text-slate-400 font-mono tracking-wider">
+                  ESTIMATED JOURNEY COST
+                </span>
+                <div className="font-mono font-black text-slate-900 text-lg flex items-baseline gap-1.5">
+                  <span>₹{tripPlan.costSummary.totalJourneyCostINR.toLocaleString('en-IN')}</span>
+                  {tripPlan.costSummary.costPerKmINR > 0 && (
+                    <span className="text-[10px] text-sky-600 font-extrabold">
+                      (₹{tripPlan.costSummary.costPerKmINR}/km)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs font-mono text-slate-600">
+                <span>⚡ Charging ₹{tripPlan.costSummary.estimatedChargingCostINR.toLocaleString('en-IN')}</span>
+                <span>🛣️ Tolls ₹{tripPlan.costSummary.estimatedTollCostINR.toLocaleString('en-IN')}</span>
+              </div>
+
+              {/* Proportional Split Bar */}
+              <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden flex shadow-inner">
+                <div
+                  style={{ width: `${tripPlan.costSummary.chargingCostPercent}%` }}
+                  className="h-full bg-sky-500"
+                />
+                <div
+                  style={{ width: `${tripPlan.costSummary.tollCostPercent}%` }}
+                  className="h-full bg-amber-500"
+                />
+              </div>
+
+              {/* Breakdown Button */}
+              <button
+                onClick={() => setShowAnalyticsModal(true)}
+                className="w-full min-h-[44px] mt-1.5 py-2.5 px-3.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-extrabold text-slate-800 flex items-center justify-between transition-colors shadow-2xs cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-sky-600" />
+                  <span>View Journey Breakdown</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+
+            {/* 4-Stat Grid */}
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <span className="text-[10px] text-slate-400 block">ROAD DISTANCE</span>
+                <span className="font-extrabold text-slate-900 text-sm">{tripPlan.totalRoadDistanceKm} km</span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <span className="text-[10px] text-slate-400 block">STARTING SOC</span>
+                <span className="font-extrabold text-emerald-600 text-sm">{tripPlan.startingSOCPercent}% Battery</span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <span className="text-[10px] text-slate-400 block">DRIVING TIME</span>
+                <span className="font-extrabold text-slate-700 text-sm">
+                  {Math.floor(tripPlan.totalDrivingDurationMinutes / 60)}h {tripPlan.totalDrivingDurationMinutes % 60}m
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <span className="text-[10px] text-slate-400 block">CHARGING STOPS</span>
+                <span className="font-extrabold text-emerald-600 text-sm">{tripPlan.recommendedStops.length} Stops</span>
+              </div>
+            </div>
+
+            {/* Journey Readiness Section */}
+            {tripPlan.readinessScore && (
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5 font-sans shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase text-slate-400 font-mono tracking-wider">
+                    JOURNEY READINESS
+                  </span>
+                  <span className="text-[9px] font-mono font-extrabold text-slate-500">
+                    CONFIDENCE · {tripPlan.readinessScore.confidence}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] border ${
+                      tripPlan.readinessScore.status === 'READY'
+                        ? 'bg-emerald-500/10 text-emerald-700 border-emerald-300'
+                        : tripPlan.readinessScore.status === 'READY_WITH_ATTENTION'
+                        ? 'bg-amber-500/10 text-amber-700 border-amber-300'
+                        : tripPlan.readinessScore.status === 'REVIEW'
+                        ? 'bg-amber-500/10 text-amber-700 border-amber-300'
+                        : 'bg-rose-500/10 text-rose-700 border-rose-300'
+                    }`}>
+                      {tripPlan.readinessScore.status === 'READY'
+                        ? '✓ JOURNEY READY'
+                        : tripPlan.readinessScore.status === 'READY_WITH_ATTENTION'
+                        ? '✓ READY WITH ATTENTION'
+                        : tripPlan.readinessScore.status === 'REVIEW'
+                        ? '⚠ PLAN NEEDS REVIEW'
+                        : '✕ NOT READY'}
+                    </span>
+                  </div>
+
+                  <div className="font-mono font-black text-slate-900 text-lg">
+                    {animatedScore} <span className="text-xs font-bold text-slate-400">/ 100</span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                  {tripPlan.readinessScore.warnings.length > 0
+                    ? tripPlan.readinessScore.warnings[0]
+                    : tripPlan.readinessScore.strengths[0] || 'Planned strategy provides sufficient route coverage.'}
+                </p>
+
+                <button
+                  onClick={() => setShowReadinessModal(true)}
+                  className="w-full min-h-[44px] mt-1 py-2.5 px-3 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-extrabold text-slate-800 flex items-center justify-between transition-colors shadow-2xs cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>View Readiness Details</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </button>
+              </div>
+            )}
+
+            {/* Plan B Alternate Charging Recovery Card */}
+            <PlanBRecoveryCard
+              isAnalyzing={isAnalyzingPlanB}
+              recoveryResult={planBResult}
+              onAnalyze={handleAnalyzePlanB}
+              onApplyPlanB={handleApplyPlanB}
+              onKeepCurrentPlan={() => setPlanBResult(null)}
+              primaryPlanHasGap={tripPlan.readinessScore?.status !== 'READY'}
+            />
+
+            {/* Tab Selector: Recommended vs Other Compatible Route Chargers */}
+            <div className="space-y-2 pt-1">
+              <div className="flex border-b border-slate-200 text-xs font-bold">
+                <button
+                  onClick={() => setActiveTab('recommended')}
+                  className={`pb-2 px-3 border-b-2 transition-colors cursor-pointer ${
+                    activeTab === 'recommended'
+                      ? 'border-sky-500 text-sky-600 font-extrabold'
+                      : 'border-transparent text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Recommended ({tripPlan.recommendedStops.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('other')}
+                  className={`pb-2 px-3 border-b-2 transition-colors cursor-pointer ${
+                    activeTab === 'other'
+                      ? 'border-sky-500 text-sky-600 font-extrabold'
+                      : 'border-transparent text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Other Compatible ({tripPlan.otherCompatibleStations.length})
+                </button>
+              </div>
+
+              {activeTab === 'recommended' ? (
+                tripPlan.recommendedStops.length === 0 ? (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>No charging stops required for this route distance!</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {tripPlan.recommendedStops.map((stop, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => setSelectedStop(stop)}
+                        className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all ${
+                          selectedStop?.station.id === stop.station.id
+                            ? 'bg-sky-50 border-sky-400 ring-2 ring-sky-200'
+                            : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-slate-900 text-xs truncate max-w-[200px]">
+                            ⚡{idx + 1}. {stop.station.name}
+                          </span>
+                          <span className="text-[10px] font-mono font-bold text-sky-600">
+                            {stop.maxPowerKW} kW
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5">{stop.station.address}</p>
+                        <div className="flex items-center justify-between pt-1.5 mt-1.5 border-t border-slate-200/60 text-[10px] font-mono text-slate-600">
+                          <span>Arrival: {stop.estimatedArrivalSOCPercent}% SOC</span>
+                          <span className="font-bold text-emerald-600">~{stop.estimatedChargeTimeMinutes} min charge</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {tripPlan.otherCompatibleStations.map((stop, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => setSelectedStop(stop)}
+                      className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all ${
+                        selectedStop?.station.id === stop.station.id
+                          ? 'bg-sky-50 border-sky-400 ring-2 ring-sky-200'
+                          : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-slate-900 text-xs truncate max-w-[200px]">
+                          ⚡ {stop.station.name}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-slate-500">
+                          {stop.maxPowerKW} kW
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 truncate mt-0.5">{stop.station.address}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+      </>
+    )}
 
       {/* Progressive Disclosure Toll & Cost Analytics Modal */}
       {tripPlan && showAnalyticsModal && (

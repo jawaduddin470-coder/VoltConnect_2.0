@@ -90,7 +90,7 @@ const AppLayout: React.FC<{ children: React.ReactNode; hideFooter?: boolean }> =
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 ev-pattern-bg">
       <Navbar />
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-20 lg:pb-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-28 sm:pb-32 lg:pb-8">
         <ErrorBoundary>
           <div key={location.pathname} className="vc-page-enter">
             {children}

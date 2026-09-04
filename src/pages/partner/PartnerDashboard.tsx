@@ -182,10 +182,10 @@ export const PartnerDashboard: React.FC = () => {
       </div>
 
       {/* 2. PARTNER TABS */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 text-xs font-bold">
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-3 text-xs font-bold overflow-x-auto no-scrollbar flex-nowrap">
         <button
           onClick={() => setActiveTab('overview')}
-          className={`px-4 py-2 rounded-xl transition-all ${
+          className={`px-4 py-2 rounded-xl transition-all shrink-0 ${
             activeTab === 'overview' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -194,7 +194,7 @@ export const PartnerDashboard: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('stations')}
-          className={`px-4 py-2 rounded-xl transition-all ${
+          className={`px-4 py-2 rounded-xl transition-all shrink-0 ${
             activeTab === 'stations' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -203,7 +203,7 @@ export const PartnerDashboard: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('reports')}
-          className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+          className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 ${
             activeTab === 'reports' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -217,7 +217,7 @@ export const PartnerDashboard: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('feeds')}
-          className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1 ${
+          className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1 shrink-0 ${
             activeTab === 'feeds' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
@@ -390,8 +390,8 @@ export const PartnerDashboard: React.FC = () => {
 
       {/* 5-STEP ADD STATION WIZARD MODAL */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl p-4 sm:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto space-y-6 shadow-2xl">
             
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
@@ -560,8 +560,8 @@ export const PartnerDashboard: React.FC = () => {
 
       {/* EDIT STATION & TARIFF MODAL */}
       {editingStation && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl p-4 sm:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-5 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="text-[10px] font-bold text-sky-600 uppercase tracking-wider">CPO Station Configuration</span>

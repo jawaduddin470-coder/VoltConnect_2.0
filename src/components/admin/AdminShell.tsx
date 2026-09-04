@@ -129,7 +129,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({ children }) => {
             </button>
 
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 p-4 z-50 animate-in fade-in slide-in-from-top-2">
+              <div className="absolute right-0 mt-2 w-[calc(100vw-32px)] sm:w-80 max-w-xs bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 p-4 z-50 animate-in fade-in slide-in-from-top-2">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
                   <span className="font-heading font-extrabold text-xs text-white">Operational Stream</span>
                   <span className="text-[9px] text-slate-400 font-bold uppercase">Real-time Events</span>
@@ -181,8 +181,16 @@ export const AdminShell: React.FC<AdminShellProps> = ({ children }) => {
       </header>
 
       {/* 2. BODY SHELL LAYOUT: SIDEBAR + CONTENT AREA */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         
+        {/* Mobile Backdrop Overlay */}
+        {mobileSidebarOpen && (
+          <div
+            onClick={() => setMobileSidebarOpen(false)}
+            className="fixed inset-0 bg-black/60 z-20 lg:hidden backdrop-blur-xs transition-opacity"
+          />
+        )}
+
         {/* OPERATIONAL SIDEBAR (DESKTOP + MOBILE DRAWER) */}
         <aside
           className={`fixed lg:static inset-y-0 left-0 z-30 w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between transition-transform duration-300 ${
