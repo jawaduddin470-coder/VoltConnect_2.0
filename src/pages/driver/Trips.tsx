@@ -56,17 +56,48 @@ export const SmartTripPlanner: React.FC = () => {
     requestLocation,
   } = useUserLocation();
 
-  // Location parameters passed from VoltMap
-  const passedDestLat = location.search ? new URLSearchParams(location.search).get('destLat') : null;
-  const passedDestLng = location.search ? new URLSearchParams(location.search).get('destLng') : null;
-  const passedDestName = location.search ? new URLSearchParams(location.search).get('destName') : null;
+  // Helper to extract destination from incoming location state or URL params (from VoltMap / Explore)
+  const getIncomingDestination = (): RouteWaypointInput | null => {
+    const stateDest = (location.state as any)?.destination;
+    if (stateDest) {
+      const lat = Number(stateDest.lat ?? stateDest.latitude);
+      const lng = Number(stateDest.lng ?? stateDest.longitude);
+      if (!isNaN(lat) && !isNaN(lng) && lat !== 0) {
+        return {
+          name: stateDest.name || stateDest.address || 'Selected Charging Hub',
+          latitude: lat,
+          longitude: lng,
+        };
+      }
+    }
+
+    if (location.search) {
+      const params = new URLSearchParams(location.search);
+      const qLat = params.get('destLat') || params.get('lat');
+      const qLng = params.get('destLng') || params.get('lng');
+      const qName = params.get('destName') || params.get('destination') || params.get('name');
+      if (qLat && qLng) {
+        const lat = parseFloat(qLat);
+        const lng = parseFloat(qLng);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          return {
+            name: qName ? decodeURIComponent(qName) : 'Selected Charging Hub',
+            latitude: lat,
+            longitude: lng,
+          };
+        }
+      }
+    }
+    return null;
+  };
 
   // Waypoints State
   const [waypoints, setWaypoints] = useState<RouteWaypointInput[]>(() => {
-    if (passedDestLat && passedDestLng && passedDestName) {
+    const incoming = getIncomingDestination();
+    if (incoming) {
       return [
         { name: 'Hyderabad (Gachibowli)', latitude: 17.435, longitude: 78.385 },
-        { name: decodeURIComponent(passedDestName), latitude: parseFloat(passedDestLat), longitude: parseFloat(passedDestLng) },
+        incoming,
       ];
     }
     return [
@@ -74,6 +105,26 @@ export const SmartTripPlanner: React.FC = () => {
       { name: 'Srinagar (Kashmir)', latitude: 34.0837, longitude: 74.7973 },
     ];
   });
+
+  // Re-sync waypoints when user navigates into /trips with a new selected station from VoltMap
+  useEffect(() => {
+    const incoming = getIncomingDestination();
+    if (incoming) {
+      setWaypoints(prev => {
+        const origin = prev.length > 0 ? prev[0] : { name: 'Hyderabad (Gachibowli)', latitude: 17.435, longitude: 78.385 };
+        const currentDest = prev[prev.length - 1];
+        if (
+          currentDest &&
+          Math.abs(currentDest.latitude - incoming.latitude) < 0.0001 &&
+          Math.abs(currentDest.longitude - incoming.longitude) < 0.0001
+        ) {
+          return prev;
+        }
+        return [origin, incoming];
+      });
+      setPlanError(null);
+    }
+  }, [location.state, location.search]);
 
   // Autocomplete State
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
@@ -218,7 +269,7 @@ export const SmartTripPlanner: React.FC = () => {
   useEffect(() => {
     chargingDataService.getStations().then(data => {
       setStations(data);
-      if (passedDestLat && passedDestLng) {
+      if (getIncomingDestination()) {
         handlePlanJourney();
       }
     });

@@ -14,6 +14,7 @@ import {
   fetchUserVehicles,
   updateUserRole,
 } from '@/services/firebase';
+import { MASTER_VEHICLE_CATALOG } from '@/features/vehicles/VehicleCatalog';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -100,11 +101,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [vehicles, setVehicles] = useState<UserVehicle[]>(() => {
     const saved = localStorage.getItem('vc_vehicles');
-    return saved ? JSON.parse(saved) : [DEFAULT_VEHICLE];
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [activeVehicle, setActiveVehicleState] = useState<UserVehicle | null>(() => {
-    return vehicles.find(v => v.isDefault) || vehicles[0] || DEFAULT_VEHICLE;
+    const savedVehicles = localStorage.getItem('vc_vehicles');
+    const parsed: UserVehicle[] = savedVehicles ? JSON.parse(savedVehicles) : [];
+    const savedUser = localStorage.getItem('vc_user');
+    const parsedUser: UserProfile | null = savedUser ? JSON.parse(savedUser) : null;
+    return (
+      parsed.find(v => v.id === parsedUser?.activeVehicleId) ||
+      parsed.find(v => v.isDefault) ||
+      parsed[0] ||
+      null
+    );
   });
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -121,7 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               name: fbUser.displayName || fbUser.email?.split('@')[0].toUpperCase() || 'VOLT DRIVER',
               email: fbUser.email || 'user@voltconnect.io',
               photoURL: fbUser.photoURL || undefined,
-              provider: fbUser.providerData[0]?.providerId || 'google.com',
+              provider: fbUser.providerData[0]?.providerId || 'password',
               role: 'driver',
               onboardingComplete: false,
               profileComplete: false,
@@ -139,8 +149,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
 
           const dbVehicles = await fetchUserVehicles(fbUser.uid);
-          if (dbVehicles.length > 0) {
-            setVehicles(dbVehicles);
+          let currentVehicles = dbVehicles;
+
+          // Reconstruct vehicle if profile has saved brand/model but vehicles collection had no docs
+          if (currentVehicles.length === 0 && profile?.vehicleBrand && profile?.vehicleModel) {
+            const catalogMatch = MASTER_VEHICLE_CATALOG.find(
+              v =>
+                v.manufacturer.toLowerCase() === profile?.vehicleBrand?.toLowerCase() &&
+                v.model.toLowerCase() === profile?.vehicleModel?.toLowerCase()
+            );
+
+            const recoveredVehicle: UserVehicle = {
+              id: profile.activeVehicleId || profile.vehicleId || `veh-${Date.now()}`,
+              userId: fbUser.uid,
+              category: catalogMatch?.category || '4-wheeler',
+              manufacturer: profile.vehicleBrand,
+              model: profile.vehicleModel,
+              variant: profile.vehicleVariant || catalogMatch?.variant || '',
+              batteryCapacitykWh: catalogMatch?.batteryCapacitykWh || 45.0,
+              usableCapacitykWh: catalogMatch?.usableCapacitykWh || 43.2,
+              estimatedRangeKm: catalogMatch?.estimatedRangeKm || 345,
+              currentBatteryPercent: 85,
+              estimatedHealthSOH: 98,
+              connectorTypes: catalogMatch?.connectorTypes || ['CCS2', 'Type2'],
+              acMaxPowerKW: catalogMatch?.acMaxPowerKW || 7.2,
+              dcMaxPowerKW: catalogMatch?.dcMaxPowerKW || 60.0,
+              isDefault: true,
+              dataSource: 'VERIFIED',
+              createdAt: new Date().toISOString(),
+            };
+
+            currentVehicles = [recoveredVehicle];
+            saveUserVehicle(recoveredVehicle).catch(err => console.warn('[AuthContext] Vehicle sync warning:', err));
+          }
+
+          if (currentVehicles.length > 0) {
+            setVehicles(currentVehicles);
+            const active =
+              currentVehicles.find(v => v.id === profile?.activeVehicleId) ||
+              currentVehicles.find(v => v.isDefault) ||
+              currentVehicles[0];
+            setActiveVehicleState(active);
+          } else if (profile.onboardingComplete) {
+            // Profile is marked complete, ensure active vehicle fallback is present
+            const defaultUserVehicle: UserVehicle = {
+              ...DEFAULT_VEHICLE,
+              userId: fbUser.uid,
+            };
+            setVehicles([defaultUserVehicle]);
+            setActiveVehicleState(defaultUserVehicle);
+            saveUserVehicle(defaultUserVehicle).catch(() => {});
+          } else {
+            // Brand new user without vehicles
+            setVehicles([]);
+            setActiveVehicleState(null);
           }
 
           setUser(profile);
@@ -149,6 +211,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         setUser(null);
+        setVehicles([]);
+        setActiveVehicleState(null);
         localStorage.removeItem('vc_user');
         localStorage.removeItem('vc_vehicles');
       }
@@ -167,12 +231,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user]);
 
   useEffect(() => {
-    localStorage.setItem('vc_vehicles', JSON.stringify(vehicles));
+    if (vehicles.length > 0) {
+      localStorage.setItem('vc_vehicles', JSON.stringify(vehicles));
+    } else {
+      localStorage.removeItem('vc_vehicles');
+    }
     const active =
       vehicles.find(v => v.id === user?.activeVehicleId) ||
       vehicles.find(v => v.isDefault) ||
       vehicles[0] ||
-      DEFAULT_VEHICLE;
+      (user?.onboardingComplete ? DEFAULT_VEHICLE : null);
     setActiveVehicleState(active);
   }, [vehicles, user]);
 
@@ -288,8 +356,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('[AuthContext] Firebase logout warning:', err);
     } finally {
       setUser(null);
+      setVehicles([]);
+      setActiveVehicleState(null);
       localStorage.removeItem('vc_user');
       localStorage.removeItem('vc_vehicles');
+      sessionStorage.removeItem('vc_onboarding_step');
+      sessionStorage.removeItem('vc_onboarding_name');
     }
   };
 
