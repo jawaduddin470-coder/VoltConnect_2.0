@@ -48,6 +48,10 @@ export const AdminStationsView: React.FC = () => {
   // Selected Station Detail & Edit Modal State
   const [selectedStation, setSelectedStation] = useState<ChargingStation | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [verificationTab, setVerificationTab] = useState<'ALL' | 'pending' | 'approved' | 'rejected'>('ALL');
+  const [rejectingStation, setRejectingStation] = useState<ChargingStation | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('Inaccurate GPS coordinates or incomplete hardware specifications.');
+  const [rejectionError, setRejectionError] = useState<string | null>(null);
 
   // Edit Form Fields
   const [editName, setEditName] = useState('');
@@ -58,7 +62,7 @@ export const AdminStationsView: React.FC = () => {
 
   const fetchStationsData = () => {
     setLoading(true);
-    chargingDataService.getStations().then(data => {
+    chargingDataService.getAllStationsForAdmin().then(data => {
       setStations(data);
       setLoading(false);
     });
@@ -108,6 +112,9 @@ export const AdminStationsView: React.FC = () => {
     // 8. Status Filter
     if (selectedStatus !== 'ALL' && st.status !== selectedStatus) return false;
 
+    // 9. Verification Tab Filter
+    if (verificationTab !== 'ALL' && st.verificationStatus !== verificationTab) return false;
+
     return true;
   });
 
@@ -115,37 +122,56 @@ export const AdminStationsView: React.FC = () => {
   const totalPages = Math.ceil(filteredStations.length / PAGE_SIZE) || 1;
   const paginatedStations = filteredStations.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  // Admin Actions
-  const handleVerifyStation = async (station: ChargingStation, verify: boolean) => {
+  // Admin Verification Center Actions
+  const handleApproveStation = async (station: ChargingStation) => {
     if (!user) return;
-    const newVerificationStatus: VerificationStatus = verify ? 'approved' : 'pending';
-    const updated: ChargingStation = {
-      ...station,
-      verificationStatus: newVerificationStatus,
-      admin_verified: verify,
-      admin_modified_at: new Date().toISOString(),
-      admin_modified_by: user.email,
-    };
+    await operationsService.reviewStation(station.id, 'approved', user.uid, user.email);
+    chargingDataService.clearCache();
+    fetchStationsData();
+    if (selectedStation?.id === station.id) {
+      setSelectedStation({ ...selectedStation, verificationStatus: 'approved', admin_verified: true });
+    }
+  };
 
-    await updateDocumentFields('stations', station.id, {
-      verificationStatus: newVerificationStatus,
-      admin_verified: verify,
-      admin_modified_at: new Date().toISOString(),
-      admin_modified_by: user.email,
-    });
+  const handleOpenRejectModal = (station: ChargingStation) => {
+    setRejectingStation(station);
+    setRejectionReason('Inaccurate GPS coordinates or incomplete hardware specifications.');
+    setRejectionError(null);
+  };
 
-    operationsService.logAuditEvent(
+  const handleConfirmReject = async () => {
+    if (!user || !rejectingStation) return;
+    if (!rejectionReason.trim() || rejectionReason.trim().length < 5) {
+      setRejectionError('Please provide a specific rejection reason (min 5 characters).');
+      return;
+    }
+    await operationsService.reviewStation(
+      rejectingStation.id,
+      'rejected',
       user.uid,
       user.email,
-      user.role,
-      verify ? 'ADMIN_VERIFY_STATION' : 'ADMIN_UNVERIFY_STATION',
-      'stations',
-      station.id,
-      { stationName: station.name, newVerificationStatus }
+      rejectionReason.trim()
     );
+    chargingDataService.clearCache();
+    fetchStationsData();
+    if (selectedStation?.id === rejectingStation.id) {
+      setSelectedStation({
+        ...selectedStation,
+        verificationStatus: 'rejected',
+        rejectionReason: rejectionReason.trim(),
+        admin_verified: false,
+      });
+    }
+    setRejectingStation(null);
+    setRejectionReason('');
+  };
 
-    setStations(prev => prev.map(s => (s.id === station.id ? updated : s)));
-    if (selectedStation?.id === station.id) setSelectedStation(updated);
+  const handleVerifyStation = async (station: ChargingStation, verify: boolean) => {
+    if (verify) {
+      await handleApproveStation(station);
+    } else {
+      handleOpenRejectModal(station);
+    }
   };
 
   const handleToggleStationStatus = async (station: ChargingStation, disable: boolean) => {
@@ -251,6 +277,55 @@ export const AdminStationsView: React.FC = () => {
           <Zap className="w-4 h-4 text-sky-400" />
           <span>{filteredStations.length} of {stations.length} Hubs Loaded</span>
         </div>
+      </div>
+
+      {/* VERIFICATION CENTER SUB-TABS */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-2">
+        <button
+          onClick={() => { setVerificationTab('ALL'); setCurrentPage(1); }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            verificationTab === 'ALL'
+              ? 'bg-sky-500 text-white shadow'
+              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          All Stations ({stations.length})
+        </button>
+        <button
+          onClick={() => { setVerificationTab('pending'); setCurrentPage(1); }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            verificationTab === 'pending'
+              ? 'bg-amber-500 text-slate-950 shadow'
+              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <span>Pending Verification</span>
+          {stations.filter(s => s.verificationStatus === 'pending').length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-400 text-slate-950">
+              {stations.filter(s => s.verificationStatus === 'pending').length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => { setVerificationTab('approved'); setCurrentPage(1); }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            verificationTab === 'approved'
+              ? 'bg-emerald-500 text-white shadow'
+              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          Approved ({stations.filter(s => s.verificationStatus === 'approved').length})
+        </button>
+        <button
+          onClick={() => { setVerificationTab('rejected'); setCurrentPage(1); }}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+            verificationTab === 'rejected'
+              ? 'bg-rose-500 text-white shadow'
+              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          Rejected ({stations.filter(s => s.verificationStatus === 'rejected').length})
+        </button>
       </div>
 
       {/* 2. SEARCH & MULTI-FILTER TOOLBAR */}
@@ -445,6 +520,14 @@ export const AdminStationsView: React.FC = () => {
                         }`}>
                           {st.verificationStatus}
                         </span>
+                        {st.verificationStatus === 'rejected' && st.rejectionReason && (
+                          <span
+                            title={`Rejection Reason: ${st.rejectionReason}`}
+                            className="text-[9px] text-rose-400 block font-normal truncate max-w-[120px] mt-0.5"
+                          >
+                            {st.rejectionReason}
+                          </span>
+                        )}
                       </td>
 
                       {/* Actions */}
@@ -457,21 +540,38 @@ export const AdminStationsView: React.FC = () => {
                           View
                         </button>
 
-                        {st.verificationStatus !== 'approved' ? (
+                        {st.verificationStatus === 'pending' ? (
+                          <>
+                            <button
+                              onClick={() => handleApproveStation(st)}
+                              className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]"
+                              title="Approve Station"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleOpenRejectModal(st)}
+                              className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px]"
+                              title="Reject Station with Reason"
+                            >
+                              Reject
+                            </button>
+                          </>
+                        ) : st.verificationStatus === 'approved' ? (
                           <button
-                            onClick={() => handleVerifyStation(st, true)}
-                            className="px-2 py-1 rounded-lg bg-emerald-600/80 hover:bg-emerald-600 text-white font-bold text-[10px]"
-                            title="Verify Station"
+                            onClick={() => handleOpenRejectModal(st)}
+                            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white font-bold text-[10px]"
+                            title="Reject Station"
                           >
-                            Verify
+                            Reject
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleVerifyStation(st, false)}
-                            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-amber-600 text-amber-300 font-bold text-[10px]"
-                            title="Unverify Station"
+                            onClick={() => handleApproveStation(st)}
+                            className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white font-bold text-[10px]"
+                            title="Re-approve Station"
                           >
-                            Unverify
+                            Approve
                           </button>
                         )}
 
@@ -731,6 +831,70 @@ export const AdminStationsView: React.FC = () => {
               </div>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* REJECTION REASON MODAL */}
+      {rejectingStation && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-rose-400" />
+                <h3 className="font-heading font-extrabold text-white text-base">Reject Charging Station</h3>
+              </div>
+              <button
+                onClick={() => setRejectingStation(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <div className="font-bold text-white">{rejectingStation.name}</div>
+              <div className="text-slate-400">{rejectingStation.address}, {rejectingStation.city}</div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-300 block">
+                Rejection Reason (Audited & Communicated to Partner)
+              </label>
+              <textarea
+                value={rejectionReason}
+                onChange={e => setRejectionReason(e.target.value)}
+                placeholder="Specify reason, e.g., missing electrical safety certification, wrong GPS pin, unsupported tariff, or offline hardware..."
+                className="w-full h-28 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 font-medium focus:outline-none focus:border-rose-500"
+                required
+              />
+              <p className="text-[10px] text-slate-400">
+                This reason will be logged in Firestore and displayed on the station record.
+              </p>
+            </div>
+
+            {rejectionError && (
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold">
+                {rejectionError}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setRejectingStation(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReject}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md flex items-center gap-1.5"
+              >
+                <XCircle className="w-4 h-4" /> Confirm Rejection
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -19,7 +19,7 @@ export const AdminLogin: React.FC = () => {
     setAccessDenied(false);
 
     try {
-      await login(email, 'admin');
+      await login(email, password, 'admin');
       navigate('/admin/dashboard');
     } catch (err) {
       setAccessDenied(true);

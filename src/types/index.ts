@@ -143,6 +143,9 @@ export interface ChargingStation {
   dataFreshnessTag?: 'LIVE' | 'RECENT' | 'STALE';
   createdBy?: string;
   updatedBy?: string;
+  rejectionReason?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
   admin_verified?: boolean;
   admin_modified_at?: string;
   admin_modified_by?: string;

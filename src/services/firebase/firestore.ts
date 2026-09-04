@@ -6,6 +6,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  addDoc,
   query,
   where,
   QueryConstraint,
@@ -14,6 +15,23 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { firebaseDb } from './config';
+
+/**
+ * Adds a new document to a collection with an auto-generated ID.
+ */
+export async function addDocument<T extends Record<string, any>>(
+  collectionName: string,
+  data: T
+): Promise<string | null> {
+  try {
+    const colRef = collection(firebaseDb, collectionName);
+    const docRef = await addDoc(colRef, data);
+    return docRef.id;
+  } catch (error) {
+    console.error(`[Firestore] Failed to add document to ${collectionName}:`, error);
+    return null;
+  }
+}
 
 /**
  * Reads a single document by collection name and document ID.

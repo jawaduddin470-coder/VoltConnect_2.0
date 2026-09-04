@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { operationsService } from '@/services/operationsService';
 import { getCollectionDocs, setDocument, updateDocumentFields } from '@/services/firebase/firestore';
+import { adminCreatePartnerAccount } from '@/services/firebase/users';
 import { ServicePartner, PartnerApplication, TechnicianProfile } from '@/types';
 import {
   Building2,
@@ -81,6 +82,10 @@ export const AdminPartnersView: React.FC = () => {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('Hyderabad');
+  const [password, setPassword] = useState('Partner@123');
+  const [partnerSubmitting, setPartnerSubmitting] = useState(false);
+  const [partnerError, setPartnerError] = useState<string | null>(null);
+  const [partnerSuccess, setPartnerSuccess] = useState<string | null>(null);
 
   const loadPartnerData = async () => {
     setLoading(true);
@@ -272,36 +277,56 @@ export const AdminPartnersView: React.FC = () => {
 
   const handleSavePartner = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentAdmin || !partnerName.trim()) return;
+    if (!currentAdmin || !partnerName.trim() || !email.trim() || !password.trim()) return;
 
-    const id = `partner-${partnerName.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
-    const newPartner: ManagedPartner = {
-      id,
-      name: partnerName,
-      partnerType,
-      contactPerson,
-      email,
-      phone,
-      city,
-      verificationStatus: 'approved',
-      status: 'ACTIVE',
-      createdAt: new Date().toISOString(),
-    };
+    setPartnerSubmitting(true);
+    setPartnerError(null);
+    setPartnerSuccess(null);
 
-    await setDocument('voltconnect_partners', id, newPartner);
-    operationsService.logAuditEvent(
-      currentAdmin.uid,
-      currentAdmin.email,
-      currentAdmin.role,
-      'ADMIN_ADD_PARTNER',
-      'voltconnect_partners',
-      id,
-      { partnerName, partnerType, city }
-    );
+    try {
+      // 1. Provision real Firebase Auth credentials & profile
+      const newProfile = await adminCreatePartnerAccount({
+        email: email.trim(),
+        password: password.trim(),
+        name: contactPerson.trim() || partnerName.trim(),
+        companyName: partnerName.trim(),
+        phone: phone.trim(),
+        createdByAdminUid: currentAdmin.uid,
+      });
 
-    loadPartnerData();
-    setShowAddPartnerModal(false);
-    setPartnerName('');
+      // 2. Also register in local state / table
+      const newPartner: ManagedPartner = {
+        id: newProfile.uid,
+        name: partnerName.trim(),
+        partnerType,
+        contactPerson: contactPerson.trim() || partnerName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        city: city.trim() || 'Pan-India',
+        stationsCount: 0,
+        verificationStatus: 'approved',
+        status: 'ACTIVE',
+        createdAt: new Date().toISOString(),
+      };
+
+      setPartners(prev => [newPartner, ...prev]);
+      setPartnerSuccess(`Partner account created successfully! Login: ${email.trim()}`);
+      setTimeout(() => {
+        setShowAddPartnerModal(false);
+        setPartnerName('');
+        setEmail('');
+        setPassword('Partner@123');
+        setContactPerson('');
+        setPhone('');
+        setPartnerSuccess(null);
+        setPartnerError(null);
+      }, 1200);
+    } catch (err: any) {
+      console.error('Failed to create partner account:', err);
+      setPartnerError(err?.message || 'Failed to create partner account.');
+    } finally {
+      setPartnerSubmitting(false);
+    }
   };
 
   return (
@@ -672,19 +697,49 @@ export const AdminPartnersView: React.FC = () => {
                 </div>
               </div>
 
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-300">Initial Login Password</label>
+                <input
+                  type="text"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 font-bold text-white text-xs"
+                  required
+                  minLength={6}
+                />
+                <p className="text-[10px] text-slate-400">
+                  This sets the partner's initial credentials for login at /partner/dashboard.
+                </p>
+              </div>
+
+              {partnerError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold">
+                  {partnerError}
+                </div>
+              )}
+
+              {partnerSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                  {partnerSuccess}
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowAddPartnerModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700"
+                  disabled={partnerSubmitting}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-sky-500 text-white font-bold text-xs hover:bg-sky-400 shadow-md"
+                  disabled={partnerSubmitting}
+                  className="px-4 py-2 rounded-xl bg-sky-500 text-white font-bold text-xs hover:bg-sky-400 shadow-md disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  Register Partner
+                  {partnerSubmitting ? 'Provisioning Account...' : 'Register Partner & Create Account'}
                 </button>
               </div>
             </form>

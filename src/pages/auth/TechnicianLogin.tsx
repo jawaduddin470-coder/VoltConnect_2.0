@@ -19,7 +19,7 @@ export const TechnicianLogin: React.FC = () => {
     setAccessDenied(false);
 
     try {
-      await login(email, 'technician');
+      await login(email, password, 'technician');
       navigate('/technician/dashboard');
     } catch (err) {
       setAccessDenied(true);

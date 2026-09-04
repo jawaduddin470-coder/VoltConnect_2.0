@@ -58,11 +58,13 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 2. CHARGING STATIONS (Public Read for VoltMap; Admin/Partner Write)
+    // 2. CHARGING STATIONS (Public Read; Admin Full Control; Partner Scoped Write)
     // =========================================================================
     match /stations/{stationId} {
       allow read: if true; // Preserves VoltMap station discovery without data loss
-      allow write: if isAdmin() || isPartner(); // Restricted to Admin/Partner roles
+      allow create: if isAdmin() || (isPartner() && request.resource.data.createdBy == request.auth.uid);
+      allow update: if isAdmin() || (isPartner() && resource.data.createdBy == request.auth.uid);
+      allow delete: if isAdmin();
     }
 
     // =========================================================================
@@ -74,10 +76,13 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 4. USER MANAGEMENT (Driver isolated to own profile; Admin manages all)
+    // 4. USER MANAGEMENT (Driver isolated to own profile; Admin manages all; Role protected)
     // =========================================================================
     match /users/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) || isAdmin();
+      allow update: if isAdmin() || (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])));
+      allow delete: if isAdmin();
 
       match /vehicles/{vehicleId} {
         allow read, write: if isOwner(userId) || isAdmin();
@@ -125,7 +130,8 @@ service cloud.firestore {
     // =========================================================================
     match /station_reports/{reportId} {
       allow read, create: if isAuthenticated();
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || isPartner();
+      allow delete: if isAdmin();
     }
 
     // =========================================================================

@@ -19,7 +19,7 @@ export const PartnerLogin: React.FC = () => {
     setAccessDenied(false);
 
     try {
-      await login(email, 'partner');
+      await login(email, password, 'partner');
       navigate('/partner/dashboard');
     } catch (err) {
       setAccessDenied(true);

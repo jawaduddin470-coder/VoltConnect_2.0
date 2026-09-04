@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchAllUsers, updateUserStatus, updateUserRole } from '@/services/firebase/users';
+import { fetchAllUsers, updateUserStatus, updateUserRole, adminUpdateUserRole } from '@/services/firebase/users';
 import { fetchUserServiceRequests } from '@/services/firebase/queues';
 import { operationsService } from '@/services/operationsService';
 import { UserProfile, UserRole, ServiceRequest } from '@/types';
@@ -47,6 +47,9 @@ export const AdminUsersView: React.FC = () => {
 
   // Detail Modal States
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [editRoleValue, setEditRoleValue] = useState<UserRole>('driver');
+  const [updatingRole, setUpdatingRole] = useState(false);
+  const [roleMessage, setRoleMessage] = useState<string | null>(null);
   const [activeModalTab, setActiveModalTab] = useState<'profile' | 'ev' | 'trips' | 'service'>('profile');
   const [userServiceRequests, setUserServiceRequests] = useState<ServiceRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
@@ -189,6 +192,8 @@ export const AdminUsersView: React.FC = () => {
   // Open User Inspection Modal
   const handleInspectUser = async (targetUser: UserProfile) => {
     setSelectedUser(targetUser);
+    setEditRoleValue(targetUser.role);
+    setRoleMessage(null);
     setActiveModalTab('profile');
     setLoadingRequests(true);
     try {
@@ -198,6 +203,30 @@ export const AdminUsersView: React.FC = () => {
       setUserServiceRequests([]);
     } finally {
       setLoadingRequests(false);
+    }
+  };
+
+  const handleUpdateRole = async () => {
+    if (!currentAdmin || !selectedUser || selectedUser.role === editRoleValue) return;
+    setUpdatingRole(true);
+    setRoleMessage(null);
+    try {
+      await adminUpdateUserRole(
+        selectedUser.uid,
+        editRoleValue,
+        currentAdmin.uid,
+        `Role changed from ${selectedUser.role} to ${editRoleValue}`
+      );
+      const updated = { ...selectedUser, role: editRoleValue };
+      setUsersList(prev => prev.map(u => (u.uid === selectedUser.uid ? updated : u)));
+      setSelectedUser(updated);
+      setRoleMessage(`Role updated to "${editRoleValue}" in Firestore.`);
+      setTimeout(() => setRoleMessage(null), 3000);
+    } catch (err: any) {
+      console.error('Failed to update role:', err);
+      setRoleMessage(err?.message || 'Failed to update user role.');
+    } finally {
+      setUpdatingRole(false);
     }
   };
 
@@ -491,9 +520,33 @@ export const AdminUsersView: React.FC = () => {
             {activeModalTab === 'profile' && (
               <div className="space-y-4 text-xs">
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
                     <span className="text-[9px] text-slate-400 font-bold uppercase block">Account Role</span>
-                    <span className="font-bold text-white capitalize">{selectedUser.role}</span>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={editRoleValue}
+                        onChange={e => setEditRoleValue(e.target.value as UserRole)}
+                        className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-white font-bold text-xs"
+                      >
+                        <option value="driver">Driver</option>
+                        <option value="partner">Partner (CPO)</option>
+                        <option value="technician">Technician</option>
+                        <option value="admin">Admin</option>
+                        <option value="super_admin">Super Admin</option>
+                      </select>
+                      {editRoleValue !== selectedUser.role && (
+                        <button
+                          onClick={handleUpdateRole}
+                          disabled={updatingRole}
+                          className="px-2.5 py-1 rounded-lg bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs shadow disabled:opacity-50"
+                        >
+                          {updatingRole ? 'Updating...' : 'Save'}
+                        </button>
+                      )}
+                    </div>
+                    {roleMessage && (
+                      <p className="text-[10px] text-emerald-400 font-semibold">{roleMessage}</p>
+                    )}
                   </div>
                   <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
                     <span className="text-[9px] text-slate-400 font-bold uppercase block">Account Access Status</span>

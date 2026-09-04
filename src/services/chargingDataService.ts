@@ -130,6 +130,11 @@ export function normalizeStationData(rawStation: any): ChargingStation {
     chargers,
     lastUpdated,
     dataFreshnessTag,
+    createdBy: rawStation.createdBy,
+    rejectionReason: rawStation.rejectionReason,
+    reviewedBy: rawStation.reviewedBy,
+    reviewedAt: rawStation.reviewedAt,
+    admin_verified: rawStation.admin_verified,
   };
 }
 
@@ -138,11 +143,23 @@ class ChargingDataService {
   private reports: StationReport[] = [];
   private currentSource: 'FIRESTORE' | 'LOCAL_FALLBACK' = 'LOCAL_FALLBACK';
 
+  clearCache() {
+    this.cache = null;
+  }
+
   /**
-   * Fetches charging station dataset from Firestore with local caching.
-   * Auto-seeds INITIAL_CHARGING_STATIONS if Firestore returns empty collection or offline.
+   * Fetches approved charging stations for public driver use (VoltMap, Explore, Trip Planner).
+   * Strictly filters to verificationStatus === 'approved'.
    */
   async getStations(): Promise<ChargingStation[]> {
+    const all = await this.getAllStationsForAdmin();
+    return all.filter(s => s.verificationStatus === 'approved');
+  }
+
+  /**
+   * Fetches all charging stations including pending/rejected for Admin Command Center.
+   */
+  async getAllStationsForAdmin(): Promise<ChargingStation[]> {
     if (this.cache && this.cache.length > 0) {
       return this.cache;
     }
@@ -166,6 +183,14 @@ class ChargingDataService {
     return fallbackNormalized;
   }
 
+  /**
+   * Fetches stations submitted by a specific partner UID.
+   */
+  async getStationsByPartner(partnerUid: string): Promise<ChargingStation[]> {
+    const all = await this.getAllStationsForAdmin();
+    return all.filter(s => s.createdBy === partnerUid);
+  }
+
   getDataSourceInfo(): { source: 'FIRESTORE' | 'LOCAL_FALLBACK'; count: number } {
     return {
       source: this.currentSource,
@@ -174,6 +199,16 @@ class ChargingDataService {
   }
 
   async getAllReports(): Promise<StationReport[]> {
+    try {
+      const { getCollectionDocs } = await import('./firebase/firestore');
+      const docs = await getCollectionDocs<StationReport>('station_reports');
+      if (docs && docs.length > 0) {
+        this.reports = docs;
+        return docs;
+      }
+    } catch (err) {
+      console.warn('[ChargingDataService] Firestore reports fetch warning:', err);
+    }
     return this.reports;
   }
 
@@ -185,6 +220,12 @@ class ChargingDataService {
       status: 'pending',
     };
     this.reports.unshift(newReport);
+    try {
+      const { setDocument } = await import('./firebase/firestore');
+      await setDocument('station_reports', newReport.id, newReport);
+    } catch (err) {
+      console.warn('[ChargingDataService] Firestore report persist warning:', err);
+    }
     return newReport;
   }
 
@@ -192,9 +233,15 @@ class ChargingDataService {
     const rep = this.reports.find(r => r.id === reportId);
     if (rep) {
       rep.status = status;
-      return true;
     }
-    return false;
+    try {
+      const { updateDocumentFields } = await import('./firebase/firestore');
+      await updateDocumentFields('station_reports', reportId, { status });
+      return true;
+    } catch (err) {
+      console.warn('[ChargingDataService] Firestore update report status warning:', err);
+      return !!rep;
+    }
   }
 
   /**

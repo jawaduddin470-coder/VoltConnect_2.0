@@ -43,6 +43,9 @@ export const PartnerDashboard: React.FC = () => {
   const [pricePerKWh, setPricePerKWh] = useState(18);
   const [connectorType, setConnectorType] = useState<'CCS2' | 'Type2' | 'GB/T' | 'CHAdeMO'>('CCS2');
   const [operatingHours, setOperatingHours] = useState('24/7 Open');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Editing Station State
   const [editingStation, setEditingStation] = useState<ChargingStation | null>(null);
@@ -95,63 +98,111 @@ export const PartnerDashboard: React.FC = () => {
     setEditingStation(null);
   };
 
-  useEffect(() => {
-    chargingDataService.getStations().then(data => {
-      if (user) {
-        // Strict Data Isolation: Scope to partner's owned stations
-        const owned = data.filter(s => s.createdBy === user.uid || s.operatorName?.toLowerCase().includes('partner'));
-        setPartnerStations(owned);
-      }
-    });
+  const loadPartnerData = async () => {
+    if (!user) return;
+    try {
+      const stations = await chargingDataService.getStationsByPartner(user.uid);
+      setPartnerStations(stations);
 
-    chargingDataService.getAllReports().then(reports => {
-      setPartnerReports(reports);
-    });
+      const allReports = await chargingDataService.getAllReports();
+      const ownedIds = new Set(stations.map(s => s.id));
+      setPartnerReports(allReports.filter(r => ownedIds.has(r.stationId)));
+    } catch (err) {
+      console.warn('[PartnerDashboard] Error loading partner data:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadPartnerData();
   }, [user]);
 
   const handleCreateStation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
-    const newStation = await operationsService.submitStationForApproval({
-      partnerId: user.uid,
-      name,
-      description: 'CPO Charging Hub',
-      address,
-      city,
-      latitude: lat,
-      longitude: lng,
-      operatingHours,
-      is24x7: operatingHours.includes('24/7'),
-      amenities: ['Restroom', 'WiFi', 'EV Lounge'],
-      voltScore: 92,
-      status: 'active',
-      dataSource: 'partner',
-      pricingModel: 'per_kwh',
-      chargers: [
-        {
-          id: `chg-${Date.now()}`,
-          stationId: '',
-          connectorType,
-          powerKW,
-          pricingPerKWh: pricePerKWh,
-          status: 'Available',
-          lastUpdated: new Date().toISOString(),
-        },
-      ],
-      createdBy: user.uid,
-    });
+    if (!name.trim() || name.trim().length < 3) {
+      setFormError('Station Name must be at least 3 characters.');
+      return;
+    }
+    if (!address.trim() || address.trim().length < 5) {
+      setFormError('Street Address must be at least 5 characters.');
+      return;
+    }
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      setFormError('Latitude must be a valid coordinate between -90 and 90.');
+      return;
+    }
+    if (isNaN(lng) || lng < -180 || lng > 180) {
+      setFormError('Longitude must be a valid coordinate between -180 and 180.');
+      return;
+    }
+    if (isNaN(powerKW) || powerKW <= 0 || powerKW > 360) {
+      setFormError('Max DC Power must be between 1 kW and 360 kW.');
+      return;
+    }
+    if (isNaN(pricePerKWh) || pricePerKWh <= 0 || pricePerKWh > 150) {
+      setFormError('Tariff rate must be between ₹1 and ₹150 / kWh.');
+      return;
+    }
 
-    setPartnerStations(prev => [newStation, ...prev]);
-    setShowAddModal(false);
-    setStep(1);
-    setName('');
-    setAddress('');
+    setIsSubmitting(true);
+    setFormError(null);
+
+    try {
+      const newStation = await operationsService.submitStationForApproval({
+        partnerId: user.uid,
+        name: name.trim(),
+        operatorName: user.name || 'CPO Partner',
+        description: 'CPO Charging Hub',
+        address: address.trim(),
+        city: city.trim() || 'Hyderabad',
+        latitude: Number(lat),
+        longitude: Number(lng),
+        operatingHours: operatingHours.trim() || '24/7 Open',
+        is24x7: operatingHours.includes('24/7'),
+        amenities: ['Restroom', 'WiFi', 'EV Lounge'],
+        voltScore: 92,
+        status: 'active',
+        dataSource: 'partner',
+        pricingModel: 'per_kwh',
+        chargers: [
+          {
+            id: `chg-${Date.now()}`,
+            stationId: '',
+            connectorType,
+            powerKW: Number(powerKW),
+            pricingPerKWh: Number(pricePerKWh),
+            hasVerifiedPricing: true,
+            pricingDisplay: `₹${pricePerKWh} / kWh`,
+            status: 'Available',
+            lastUpdated: new Date().toISOString(),
+          },
+        ],
+        createdBy: user.uid,
+      });
+
+      chargingDataService.clearCache();
+      setPartnerStations(prev => [newStation, ...prev.filter(s => s.id !== newStation.id)]);
+      setFormSuccess('Station submitted for Admin Verification! Status: Pending Approval.');
+
+      setTimeout(() => {
+        setShowAddModal(false);
+        setStep(1);
+        setName('');
+        setAddress('');
+        setFormSuccess(null);
+        setFormError(null);
+      }, 1500);
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to submit station.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleUpdateReportStatus = async (reportId: string, newStatus: StationReport['status']) => {
     await chargingDataService.updateReportStatus(reportId, newStatus);
-    chargingDataService.getAllReports().then(setPartnerReports);
+    loadPartnerData();
   };
 
   return (
@@ -532,6 +583,18 @@ export const PartnerDashboard: React.FC = () => {
                 </div>
               )}
 
+              {formError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-semibold">
+                  {formError}
+                </div>
+              )}
+
+              {formSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
+                  {formSuccess}
+                </div>
+              )}
+
               <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                 {step > 1 ? (
                   <button type="button" onClick={() => setStep((step - 1) as any)} className="vc-btn vc-btn-ghost text-xs">
@@ -542,14 +605,33 @@ export const PartnerDashboard: React.FC = () => {
                 {step < 5 ? (
                   <button
                     type="button"
-                    onClick={() => setStep((step + 1) as any)}
+                    onClick={() => {
+                      setFormError(null);
+                      if (step === 1 && (!name.trim() || name.trim().length < 3)) {
+                        setFormError('Please provide a station name (min 3 characters).');
+                        return;
+                      }
+                      if (step === 2 && (!address.trim() || address.trim().length < 5)) {
+                        setFormError('Please provide a valid street address (min 5 characters).');
+                        return;
+                      }
+                      if (step === 3 && (pricePerKWh <= 0 || pricePerKWh > 150)) {
+                        setFormError('Tariff must be between ₹1 and ₹150 / kWh.');
+                        return;
+                      }
+                      setStep((step + 1) as any);
+                    }}
                     className="vc-btn vc-btn-teal text-xs font-bold flex items-center gap-1"
                   >
                     Next <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 ) : (
-                  <button type="submit" className="vc-btn vc-btn-teal text-xs font-bold flex items-center gap-1">
-                    <Send className="w-3.5 h-3.5" /> Submit for Admin Verification
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="vc-btn vc-btn-teal text-xs font-bold flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <Send className="w-3.5 h-3.5" /> {isSubmitting ? 'Submitting...' : 'Submit for Admin Verification'}
                   </button>
                 )}
               </div>

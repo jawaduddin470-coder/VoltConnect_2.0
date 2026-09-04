@@ -86,16 +86,27 @@ class OperationsService {
   }
 
   /**
-   * Submits a partner station for Admin approval review.
+   * Submits a partner station for Admin approval review and persists to Firestore.
    */
-  async submitStationForApproval(station: Omit<ChargingStation, 'id' | 'verificationStatus' | 'lastUpdated'>): Promise<ChargingStation> {
+  async submitStationForApproval(
+    station: Omit<ChargingStation, 'id' | 'verificationStatus' | 'lastUpdated'> & { id?: string }
+  ): Promise<ChargingStation> {
+    const stationId = station.id || `st-partner-${Date.now()}`;
     const pendingStation: ChargingStation = {
       ...station,
-      id: `st-pending-${Date.now()}`,
+      id: stationId,
       verificationStatus: 'pending',
       lastUpdated: new Date().toISOString(),
     };
-    this.pendingStations.push(pendingStation);
+    this.pendingStations.unshift(pendingStation);
+
+    try {
+      const { setDocument } = await import('./firebase/firestore');
+      await setDocument('stations', pendingStation.id, pendingStation);
+    } catch (err) {
+      console.warn('[OperationsService] Failed to persist pending station to Firestore:', err);
+    }
+
     return pendingStation;
   }
 
@@ -103,27 +114,63 @@ class OperationsService {
    * Retrieves stations pending admin verification approval.
    */
   async getPendingStations(): Promise<ChargingStation[]> {
+    try {
+      const { fetchFirestoreStations } = await import('./firebase/stations');
+      const all = await fetchFirestoreStations();
+      const pending = all.filter(s => s.verificationStatus === 'pending');
+      if (pending.length > 0) return pending;
+    } catch (err) {
+      console.warn('[OperationsService] Firestore pending stations query error:', err);
+    }
     return this.pendingStations.filter(s => s.verificationStatus === 'pending');
   }
 
   /**
-   * Approves or rejects a partner station submission.
+   * Approves or rejects a partner station submission with Firestore persistence and audit trail.
    */
   async reviewStation(
     stationId: string,
     status: 'approved' | 'rejected',
     reviewerId: string,
-    reviewerEmail: string
+    reviewerEmail: string,
+    rejectionReason?: string
   ): Promise<boolean> {
+    const updateData: Partial<ChargingStation> = {
+      verificationStatus: status,
+      reviewedBy: reviewerId,
+      reviewedAt: new Date().toISOString(),
+      admin_verified: status === 'approved',
+      rejectionReason: status === 'rejected' ? rejectionReason || 'Station does not meet verification guidelines' : undefined,
+      lastUpdated: new Date().toISOString(),
+    };
+
     const st = this.pendingStations.find(s => s.id === stationId);
     if (st) {
-      st.verificationStatus = status;
-      this.logAuditEvent(reviewerId, reviewerEmail, 'admin', `STATION_${status.toUpperCase()}`, 'stations', stationId, {
-        stationName: st.name,
-      });
-      return true;
+      Object.assign(st, updateData);
     }
-    return false;
+
+    try {
+      const { updateDocumentFields } = await import('./firebase/firestore');
+      await updateDocumentFields('stations', stationId, updateData);
+    } catch (err) {
+      console.warn('[OperationsService] Failed to persist station review to Firestore:', err);
+    }
+
+    this.logAuditEvent(
+      reviewerId,
+      reviewerEmail,
+      'admin',
+      `STATION_${status.toUpperCase()}`,
+      'stations',
+      stationId,
+      {
+        status,
+        rejectionReason: updateData.rejectionReason,
+        stationName: st?.name,
+      }
+    );
+
+    return true;
   }
 
   /**

@@ -244,17 +244,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveVehicleState(active);
   }, [vehicles, user]);
 
-  const login = async (email: string, pass: string, role: UserRole = 'driver'): Promise<UserProfile> => {
+  const login = async (email: string, pass: string, role?: UserRole): Promise<UserProfile> => {
     setLoading(true);
     try {
       const fbUser = await loginWithFirebase(email, pass);
       let profile = await fetchUserProfile(fbUser.uid);
       if (!profile) {
+        // If attempting to log into a restricted portal without a pre-existing profile, reject
+        if (role && role !== 'driver') {
+          throw new Error(`Unauthorized: No registered ${role} profile found for this account.`);
+        }
         profile = {
           uid: fbUser.uid,
           name: email.split('@')[0].toUpperCase(),
           email,
-          role,
+          role: 'driver',
           onboardingComplete: false,
           profileComplete: false,
           createdAt: new Date().toISOString(),
@@ -262,9 +266,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           lastLoginAt: new Date().toISOString(),
         };
         await saveUserProfile(profile);
-      } else if (profile.role !== role) {
-        profile.role = role;
-        await updateUserRole(fbUser.uid, role);
+      } else {
+        // Check account suspension status
+        if (profile.status === 'SUSPENDED') {
+          throw new Error('This account has been suspended by administration. Please contact support.');
+        }
+
+        // Authoritative role validation if portal requested specific role
+        if (role && role !== 'driver') {
+          const isAllowed =
+            profile.role === role ||
+            (role === 'admin' && profile.role === 'super_admin') ||
+            (role === 'partner' && (profile.role === 'admin' || profile.role === 'super_admin')) ||
+            (role === 'technician' && (profile.role === 'admin' || profile.role === 'super_admin'));
+
+          if (!isAllowed) {
+            throw new Error(`Unauthorized: User role '${profile.role}' does not have '${role}' access privileges.`);
+          }
+        }
+
+        profile.lastLoginAt = new Date().toISOString();
+        await saveUserProfile(profile);
       }
       setUser(profile);
       return profile;
@@ -312,15 +334,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signup = async (name: string, email: string, pass: string, role: UserRole = 'driver'): Promise<UserProfile> => {
+  const signup = async (name: string, email: string, pass: string, _role: UserRole = 'driver'): Promise<UserProfile> => {
     setLoading(true);
     try {
+      // Public signup is strictly locked to driver role to prevent self-elevation
       const fbUser = await registerWithFirebase(email, pass);
       const profile: UserProfile = {
         uid: fbUser.uid,
         name,
         email,
-        role,
+        role: 'driver',
         onboardingComplete: false,
         profileComplete: false,
         createdAt: new Date().toISOString(),
@@ -367,6 +390,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const switchRole = (newRole: UserRole) => {
     if (user) {
+      // Only admins/super_admins can switch roles on demand (e.g. for role preview)
+      if (user.role !== 'admin' && user.role !== 'super_admin' && newRole !== 'driver') {
+        console.warn('[AuthContext] Unauthorized attempt to self-elevate role to', newRole);
+        return;
+      }
       const updated = { ...user, role: newRole };
       setUser(updated);
       updateUserRole(user.uid, newRole);
