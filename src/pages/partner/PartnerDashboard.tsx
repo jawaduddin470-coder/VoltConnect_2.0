@@ -278,8 +278,22 @@ export const PartnerDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    console.log(`[PORTAL_RUNTIME] role=${user?.role || 'anon'} uid=${user?.uid || 'anon'} pathname=${window.location.pathname} portal=partner component=PartnerDashboard`);
-  }, [user?.role, user?.uid]);
+    const adminEl = document.querySelector('[data-portal="admin"]');
+    if (adminEl) {
+      console.error('[P0 PORTAL VIOLATION] Admin portal detected inside Partner portal.');
+    }
+    const stored = localStorage.getItem('vc_user');
+    const storedRole = stored ? JSON.parse(stored)?.role : 'none';
+    console.log(`[PORTAL_FORENSIC]
+pathname=${window.location.pathname}
+firebaseUid=${user?.uid || 'anon'}
+firebaseEmail=${user?.email || 'none'}
+firestoreRole=${user?.role || 'none'}
+authContextRole=${user?.role || 'none'}
+storedRole=${storedRole}
+portal=partner
+expectedPortal=partner`);
+  }, [user?.role, user?.uid, user?.email]);
 
   return (
     <div data-portal="partner" className="space-y-8 pb-16 vc-page-enter">

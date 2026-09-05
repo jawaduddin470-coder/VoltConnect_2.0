@@ -10,6 +10,28 @@ export async function fetchUserProfile(uid: string): Promise<UserProfile | null>
   return getDocument<UserProfile>(USERS_COLLECTION, uid);
 }
 
+/**
+ * Single source of truth for resolving a user's authoritative role.
+ * Queries Firestore directly using the authenticated Firebase UID.
+ * Normalizes and validates the role.
+ * Returns null if the user is unauthenticated or the role cannot be securely verified.
+ */
+export async function resolveAuthoritativeRole(uid: string | null | undefined): Promise<UserRole | null> {
+  if (!uid) return null;
+  try {
+    const profile = await fetchUserProfile(uid);
+    if (!profile) return 'driver'; // brand-new authenticated account defaults to driver
+    const normalized = (profile.role || '').toLowerCase().trim();
+    if (['driver', 'partner', 'technician', 'admin', 'super_admin'].includes(normalized)) {
+      return normalized as UserRole;
+    }
+    return null; // Unknown role fails closed
+  } catch (err) {
+    console.error('[UsersService] Error resolving authoritative role for UID:', uid, err);
+    return null;
+  }
+}
+
 export async function saveUserProfile(user: UserProfile): Promise<boolean> {
   return setDocument(USERS_COLLECTION, user.uid, {
     ...user,

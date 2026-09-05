@@ -27,7 +27,7 @@ import {
 import { UserRole } from '@/types';
 
 export const Navbar: React.FC = () => {
-  const { user, role, logout, activeVehicle, vehicles, setActiveVehicle } = useAuth();
+  const { user, logout, activeVehicle, vehicles, setActiveVehicle } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 

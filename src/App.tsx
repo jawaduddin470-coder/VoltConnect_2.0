@@ -33,113 +33,43 @@ import { TechnicianDashboard } from '@/pages/technician/TechnicianDashboard';
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
 import { UserRole } from '@/types';
 
-// Protected Route Guard with Absolute Portal Isolation
-const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserRole[] }> = ({
-  children,
-  allowedRoles,
-}) => {
-  const { user, role, loading, onboardingComplete } = useAuth();
-  const location = useLocation();
+// Full-Screen High-Visibility Loading Gate
+const PortalLoadingScreen: React.FC<{ title?: string; subtitle?: string }> = ({
+  title = 'VOLTCONNECT 2.0',
+  subtitle = 'Authenticating session...',
+}) => (
+  <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-sans">
+    <div className="space-y-4 text-center">
+      <div className="w-12 h-12 rounded-full border-4 border-sky-500 border-t-transparent animate-spin mx-auto" />
+      <div className="font-heading font-extrabold text-lg text-white">{title}</div>
+      <p className="text-xs text-slate-400 font-mono">{subtitle}</p>
+    </div>
+  </div>
+);
 
-  // Handle Authentication Loading & Session Restoration State
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-sans">
-        <div className="space-y-4 text-center">
-          <div className="w-12 h-12 rounded-full border-4 border-sky-500 border-t-transparent animate-spin mx-auto" />
-          <div className="font-heading font-extrabold text-lg text-white">VOLTCONNECT 2.0</div>
-          <p className="text-xs text-slate-400 font-mono">Checking user profile & vehicle state...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const pathname = location.pathname;
-  const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/');
-  const isPartnerRoute = pathname === '/partner' || pathname.startsWith('/partner/');
-  const isTechnicianRoute = pathname === '/technician' || pathname.startsWith('/technician/');
-
-  // 1. Handle Unauthenticated Visitors per Portal:
-  if (!user) {
-    if (isAdminRoute) {
-      return <Navigate to="/login/admin" replace />;
-    }
-    if (isPartnerRoute) {
-      return <Navigate to="/login/partner" replace />;
-    }
-    if (isTechnicianRoute) {
-      return <Navigate to="/login/technician" replace />;
-    }
-    // Driver unauthenticated visitor -> Render Premium Auth Gate View inside AppLayout
-    return (
-      <AppLayout>
-        <AuthGateView />
-      </AppLayout>
-    );
-  }
-
-  // 2. Handle Admin Routes: strictly allowed for 'admin' and 'super_admin'
-  if (isAdminRoute) {
-    if (role !== 'admin' && role !== 'super_admin') {
-      if (role === 'partner') return <Navigate to="/partner/dashboard" replace />;
-      if (role === 'technician') return <Navigate to="/technician/dashboard" replace />;
-      return <Navigate to="/dashboard" replace />;
-    }
-    return <>{children}</>;
-  }
-
-  // 3. Handle Partner Routes: allowed for 'partner', 'admin', 'super_admin'
-  if (isPartnerRoute) {
-    if (role !== 'partner' && role !== 'admin' && role !== 'super_admin') {
-      if (role === 'technician') return <Navigate to="/technician/dashboard" replace />;
-      return <Navigate to="/dashboard" replace />;
-    }
-    return <>{children}</>;
-  }
-
-  // 4. Handle Technician Routes: allowed for 'technician', 'admin', 'super_admin'
-  if (isTechnicianRoute) {
-    if (role !== 'technician' && role !== 'admin' && role !== 'super_admin') {
-      if (role === 'partner') return <Navigate to="/partner/dashboard" replace />;
-      return <Navigate to="/dashboard" replace />;
-    }
-    return <>{children}</>;
-  }
-
-  // 5. Handle Driver Routes (all other protected routes):
-  // Non-drivers attempting to enter driver portal are redirected to their own dedicated command center
-  if (role === 'admin' || role === 'super_admin') {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
-  if (role === 'partner') {
-    return <Navigate to="/partner/dashboard" replace />;
-  }
-  if (role === 'technician') {
-    return <Navigate to="/technician/dashboard" replace />;
-  }
-
-  // At this point, the user is guaranteed to be a DRIVER (role === 'driver')
-  // Incomplete Driver Profile -> Force Onboarding
-  if (!onboardingComplete && pathname !== '/onboarding') {
-    return <Navigate to="/onboarding" replace />;
-  }
-
-  // Complete Driver Profile visiting /onboarding -> Redirect to Dashboard
-  if (onboardingComplete && pathname === '/onboarding') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return <>{children}</>;
-};
-
-// Main App Layout Shell
+// Main Driver App Layout Shell
 const AppLayout: React.FC<{ children: React.ReactNode; hideFooter?: boolean }> = ({ children, hideFooter = false }) => {
   const location = useLocation();
   const { user, role } = useAuth();
 
   useEffect(() => {
-    console.log(`[PORTAL_RUNTIME] role=${role} uid=${user?.uid || 'anon'} pathname=${location.pathname} portal=driver component=AppLayout`);
-  }, [role, user?.uid, location.pathname]);
+    // Assert impossible portal violation state
+    const adminEl = document.querySelector('[data-portal="admin"]');
+    if (role === 'driver' && adminEl) {
+      console.error('[P0 PORTAL VIOLATION] Driver role attempted to render Admin portal.');
+    }
+    const stored = localStorage.getItem('vc_user');
+    const storedRole = stored ? JSON.parse(stored)?.role : 'none';
+    console.log(`[PORTAL_FORENSIC]
+pathname=${location.pathname}
+firebaseUid=${user?.uid || 'anon'}
+firebaseEmail=${user?.email || 'none'}
+firestoreRole=${user?.role || 'none'}
+authContextRole=${role || 'none'}
+storedRole=${storedRole}
+portal=driver
+expectedPortal=driver`);
+  }, [role, user?.uid, user?.email, user?.role, location.pathname]);
 
   return (
     <div data-portal="driver" className="min-h-screen flex flex-col bg-slate-50 ev-pattern-bg">
@@ -154,6 +84,119 @@ const AppLayout: React.FC<{ children: React.ReactNode; hideFooter?: boolean }> =
       {!hideFooter && <Footer />}
     </div>
   );
+};
+
+// 1. DRIVER PORTAL BOUNDARY: Strictly renders Driver UI or Public AuthGateView
+const DriverPortalBoundary: React.FC<{ children: React.ReactNode; hideFooter?: boolean }> = ({
+  children,
+  hideFooter = false,
+}) => {
+  const { user, role, loading, onboardingComplete } = useAuth();
+  const location = useLocation();
+
+  // A. Still resolving auth or authoritative role -> Hold in PortalLoadingScreen
+  if (loading || (user && role === null)) {
+    return <PortalLoadingScreen title="VOLTCONNECT 2.0" subtitle="Authenticating driver session..." />;
+  }
+
+  // B. Unauthenticated visitor -> Render Public Auth Gate inside AppLayout
+  if (!user) {
+    return (
+      <AppLayout hideFooter={hideFooter}>
+        <AuthGateView />
+      </AppLayout>
+    );
+  }
+
+  // C. Authenticated user is NOT a driver: DO NOT RENDER AppLayout or Driver UI!
+  if (role !== 'driver') {
+    if (role === 'admin' || role === 'super_admin') {
+      return <Navigate to="/admin/dashboard" replace />;
+    }
+    if (role === 'partner') {
+      return <Navigate to="/partner/dashboard" replace />;
+    }
+    if (role === 'technician') {
+      return <Navigate to="/technician/dashboard" replace />;
+    }
+    return <Navigate to="/login" replace />;
+  }
+
+  // D. Role is guaranteed 'driver':
+  if (!onboardingComplete && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
+  if (onboardingComplete && location.pathname === '/onboarding') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // E. Render Driver UI inside AppLayout
+  return (
+    <AppLayout hideFooter={hideFooter}>
+      {children}
+    </AppLayout>
+  );
+};
+
+// 2. ADMIN PORTAL BOUNDARY: Strictly isolates AdminShell / AdminDashboard to admin & super_admin
+const AdminPortalBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, role, loading } = useAuth();
+
+  if (loading || (user && role === null)) {
+    return <PortalLoadingScreen title="ADMIN COMMAND CENTER" subtitle="Verifying administrator credentials..." />;
+  }
+
+  if (!user) {
+    return <Navigate to="/login/admin" replace />;
+  }
+
+  if (role !== 'admin' && role !== 'super_admin') {
+    if (role === 'partner') return <Navigate to="/partner/dashboard" replace />;
+    if (role === 'technician') return <Navigate to="/technician/dashboard" replace />;
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// 3. PARTNER PORTAL BOUNDARY: Strictly isolates Partner workspace
+const PartnerPortalBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, role, loading } = useAuth();
+
+  if (loading || (user && role === null)) {
+    return <PortalLoadingScreen title="PARTNER WORKSPACE" subtitle="Verifying CPO credentials..." />;
+  }
+
+  if (!user) {
+    return <Navigate to="/login/partner" replace />;
+  }
+
+  if (role !== 'partner' && role !== 'admin' && role !== 'super_admin') {
+    if (role === 'technician') return <Navigate to="/technician/dashboard" replace />;
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// 4. TECHNICIAN PORTAL BOUNDARY: Strictly isolates Technician workspace
+const TechnicianPortalBoundary: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, role, loading } = useAuth();
+
+  if (loading || (user && role === null)) {
+    return <PortalLoadingScreen title="TECHNICIAN WORKSPACE" subtitle="Verifying technician credentials..." />;
+  }
+
+  if (!user) {
+    return <Navigate to="/login/technician" replace />;
+  }
+
+  if (role !== 'technician' && role !== 'admin' && role !== 'super_admin') {
+    if (role === 'partner') return <Navigate to="/partner/dashboard" replace />;
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
 };
 
 export const App: React.FC = () => {
@@ -198,9 +241,9 @@ export const App: React.FC = () => {
           <Route
             path="/onboarding"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
+              <DriverPortalBoundary>
                 <Onboarding />
-              </ProtectedRoute>
+              </DriverPortalBoundary>
             }
           />
 
@@ -208,151 +251,121 @@ export const App: React.FC = () => {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <DriverDashboard />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <DriverDashboard />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/explore"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <ExplorePage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <ExplorePage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/voltmap"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <ExplorePage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <ExplorePage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/trips"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <SmartTripPlanner />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <SmartTripPlanner />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/garage"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <GaragePage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <GaragePage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/my-ev"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <GaragePage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <GaragePage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/health"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <VoltHealthPage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <VoltHealthPage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/care"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <VoltCarePage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <VoltCarePage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/homecharge"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <HomeChargePage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <HomeChargePage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/sos"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <VoltSOSPage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <VoltSOSPage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/volt-ai"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <VoltAIPage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <VoltAIPage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/ai"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <VoltAIPage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <VoltAIPage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/voltai"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <VoltAIPage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <VoltAIPage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/insight"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <VoltInsightPage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <VoltInsightPage />
+              </DriverPortalBoundary>
             }
           />
           <Route
             path="/profile"
             element={
-              <ProtectedRoute allowedRoles={['driver']}>
-                <AppLayout>
-                  <ProfilePage />
-                </AppLayout>
-              </ProtectedRoute>
+              <DriverPortalBoundary>
+                <ProfilePage />
+              </DriverPortalBoundary>
             }
           />
 
@@ -360,9 +373,17 @@ export const App: React.FC = () => {
           <Route
             path="/partner/dashboard"
             element={
-              <ProtectedRoute allowedRoles={['partner', 'admin', 'super_admin']}>
+              <PartnerPortalBoundary>
                 <PartnerDashboard />
-              </ProtectedRoute>
+              </PartnerPortalBoundary>
+            }
+          />
+          <Route
+            path="/partner/*"
+            element={
+              <PartnerPortalBoundary>
+                <PartnerDashboard />
+              </PartnerPortalBoundary>
             }
           />
 
@@ -370,9 +391,17 @@ export const App: React.FC = () => {
           <Route
             path="/technician/dashboard"
             element={
-              <ProtectedRoute allowedRoles={['technician', 'admin', 'super_admin']}>
+              <TechnicianPortalBoundary>
                 <TechnicianDashboard />
-              </ProtectedRoute>
+              </TechnicianPortalBoundary>
+            }
+          />
+          <Route
+            path="/technician/*"
+            element={
+              <TechnicianPortalBoundary>
+                <TechnicianDashboard />
+              </TechnicianPortalBoundary>
             }
           />
 
@@ -381,105 +410,105 @@ export const App: React.FC = () => {
           <Route
             path="/admin/*"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/dashboard"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/users"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/stations"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/vehicles"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/partners"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/operations"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/service"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/analytics"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/system-health"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/health"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/audit"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
           <Route
             path="/admin/settings"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <AdminPortalBoundary>
                 <AdminDashboard />
-              </ProtectedRoute>
+              </AdminPortalBoundary>
             }
           />
 

@@ -9,6 +9,7 @@ import {
   logoutFirebase,
   getAuthErrorMessage,
   fetchUserProfile,
+  resolveAuthoritativeRole,
   saveUserProfile,
   saveUserVehicle,
   fetchUserVehicles,
@@ -18,12 +19,16 @@ import { MASTER_VEHICLE_CATALOG } from '@/features/vehicles/VehicleCatalog';
 
 interface AuthContextType {
   user: UserProfile | null;
-  role: UserRole;
+  role: UserRole | null;
+  authoritativeRole: UserRole | null;
   loading: boolean;
+  authLoading: boolean;
+  roleLoading: boolean;
+  profileLoading: boolean;
   onboardingComplete: boolean;
   activeVehicle: UserVehicle | null;
   vehicles: UserVehicle[];
-  login: (email: string, pass: string, role?: UserRole) => Promise<UserProfile>;
+  login: (email: string, pass: string, portalRole?: UserRole) => Promise<UserProfile>;
   loginGoogle: () => Promise<UserProfile>;
   signup: (name: string, email: string, pass: string, role?: UserRole) => Promise<UserProfile>;
   resetPassword: (email: string) => Promise<boolean>;
@@ -94,129 +99,136 @@ export function isProfileComplete(
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('vc_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  // Authoritative State: NEVER derive role or user from localStorage as authorization authority!
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [authoritativeRole, setAuthoritativeRole] = useState<UserRole | null>(null);
 
-  const [vehicles, setVehicles] = useState<UserVehicle[]>(() => {
-    const saved = localStorage.getItem('vc_vehicles');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // Explicit, separated initialization lifecycle states to eliminate race conditions
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [profileLoading, setProfileLoading] = useState<boolean>(true);
+  const [roleLoading, setRoleLoading] = useState<boolean>(true);
 
-  const [activeVehicle, setActiveVehicleState] = useState<UserVehicle | null>(() => {
-    const savedVehicles = localStorage.getItem('vc_vehicles');
-    const parsed: UserVehicle[] = savedVehicles ? JSON.parse(savedVehicles) : [];
-    const savedUser = localStorage.getItem('vc_user');
-    const parsedUser: UserProfile | null = savedUser ? JSON.parse(savedUser) : null;
-    return (
-      parsed.find(v => v.id === parsedUser?.activeVehicleId) ||
-      parsed.find(v => v.isDefault) ||
-      parsed[0] ||
-      null
-    );
-  });
+  const [vehicles, setVehicles] = useState<UserVehicle[]>([]);
+  const [activeVehicle, setActiveVehicleState] = useState<UserVehicle | null>(null);
 
-  const [loading, setLoading] = useState<boolean>(true);
+  // Overall loading is true whenever ANY critical auth, profile, or role resolution is active
+  const loading = authLoading || profileLoading || roleLoading;
 
   // Subscribe to Real Firebase Auth State Listener (onAuthStateChanged)
   useEffect(() => {
     const unsubscribe = subscribeAuthState(async fbUser => {
-      if (fbUser) {
-        try {
-          let profile = await fetchUserProfile(fbUser.uid);
-          if (!profile) {
-            profile = {
-              uid: fbUser.uid,
-              name: fbUser.displayName || fbUser.email?.split('@')[0].toUpperCase() || 'VOLT DRIVER',
-              email: fbUser.email || 'user@voltconnect.io',
-              photoURL: fbUser.photoURL || undefined,
-              provider: fbUser.providerData[0]?.providerId || 'password',
-              role: 'driver',
-              onboardingComplete: false,
-              profileComplete: false,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              lastLoginAt: new Date().toISOString(),
-            };
-            await saveUserProfile(profile);
-          } else {
-            profile.lastLoginAt = new Date().toISOString();
-            if (fbUser.photoURL && !profile.photoURL) {
-              profile.photoURL = fbUser.photoURL;
-            }
-            await saveUserProfile(profile);
-          }
+      setAuthLoading(false);
 
-          const dbVehicles = await fetchUserVehicles(fbUser.uid);
-          let currentVehicles = dbVehicles;
-
-          // Reconstruct vehicle if profile has saved brand/model but vehicles collection had no docs
-          if (currentVehicles.length === 0 && profile?.vehicleBrand && profile?.vehicleModel) {
-            const catalogMatch = MASTER_VEHICLE_CATALOG.find(
-              v =>
-                v.manufacturer.toLowerCase() === profile?.vehicleBrand?.toLowerCase() &&
-                v.model.toLowerCase() === profile?.vehicleModel?.toLowerCase()
-            );
-
-            const recoveredVehicle: UserVehicle = {
-              id: profile.activeVehicleId || profile.vehicleId || `veh-${Date.now()}`,
-              userId: fbUser.uid,
-              category: catalogMatch?.category || '4-wheeler',
-              manufacturer: profile.vehicleBrand,
-              model: profile.vehicleModel,
-              variant: profile.vehicleVariant || catalogMatch?.variant || '',
-              batteryCapacitykWh: catalogMatch?.batteryCapacitykWh || 45.0,
-              usableCapacitykWh: catalogMatch?.usableCapacitykWh || 43.2,
-              estimatedRangeKm: catalogMatch?.estimatedRangeKm || 345,
-              currentBatteryPercent: 85,
-              estimatedHealthSOH: 98,
-              connectorTypes: catalogMatch?.connectorTypes || ['CCS2', 'Type2'],
-              acMaxPowerKW: catalogMatch?.acMaxPowerKW || 7.2,
-              dcMaxPowerKW: catalogMatch?.dcMaxPowerKW || 60.0,
-              isDefault: true,
-              dataSource: 'VERIFIED',
-              createdAt: new Date().toISOString(),
-            };
-
-            currentVehicles = [recoveredVehicle];
-            saveUserVehicle(recoveredVehicle).catch(err => console.warn('[AuthContext] Vehicle sync warning:', err));
-          }
-
-          if (currentVehicles.length > 0) {
-            setVehicles(currentVehicles);
-            const active =
-              currentVehicles.find(v => v.id === profile?.activeVehicleId) ||
-              currentVehicles.find(v => v.isDefault) ||
-              currentVehicles[0];
-            setActiveVehicleState(active);
-          } else if (profile.onboardingComplete) {
-            // Profile is marked complete, ensure active vehicle fallback is present
-            const defaultUserVehicle: UserVehicle = {
-              ...DEFAULT_VEHICLE,
-              userId: fbUser.uid,
-            };
-            setVehicles([defaultUserVehicle]);
-            setActiveVehicleState(defaultUserVehicle);
-            saveUserVehicle(defaultUserVehicle).catch(() => {});
-          } else {
-            // Brand new user without vehicles
-            setVehicles([]);
-            setActiveVehicleState(null);
-          }
-
-          setUser(profile);
-        } catch (err) {
-          console.warn('[AuthContext] Error fetching authenticated user profile:', err);
-        }
-      } else {
+      if (!fbUser) {
         setUser(null);
+        setAuthoritativeRole(null);
         setVehicles([]);
         setActiveVehicleState(null);
+        setProfileLoading(false);
+        setRoleLoading(false);
         localStorage.removeItem('vc_user');
         localStorage.removeItem('vc_vehicles');
+        return;
       }
-      setLoading(false);
+
+      setProfileLoading(true);
+      setRoleLoading(true);
+      try {
+        let profile = await fetchUserProfile(fbUser.uid);
+        if (!profile) {
+          profile = {
+            uid: fbUser.uid,
+            name: fbUser.displayName || fbUser.email?.split('@')[0].toUpperCase() || 'VOLT DRIVER',
+            email: fbUser.email || 'user@voltconnect.io',
+            photoURL: fbUser.photoURL || undefined,
+            provider: fbUser.providerData[0]?.providerId || 'password',
+            role: 'driver',
+            onboardingComplete: false,
+            profileComplete: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            lastLoginAt: new Date().toISOString(),
+          };
+          await saveUserProfile(profile);
+        } else {
+          profile.lastLoginAt = new Date().toISOString();
+          if (fbUser.photoURL && !profile.photoURL) {
+            profile.photoURL = fbUser.photoURL;
+          }
+          await saveUserProfile(profile);
+        }
+
+        // Authoritatively resolve role from Firestore profile
+        const roleRes = await resolveAuthoritativeRole(fbUser.uid);
+        const resolvedRole: UserRole = roleRes || (profile.role as UserRole) || 'driver';
+
+        const dbVehicles = await fetchUserVehicles(fbUser.uid);
+        let currentVehicles = dbVehicles;
+
+        // Reconstruct vehicle if profile has saved brand/model but vehicles collection had no docs
+        if (currentVehicles.length === 0 && profile?.vehicleBrand && profile?.vehicleModel) {
+          const catalogMatch = MASTER_VEHICLE_CATALOG.find(
+            v =>
+              v.manufacturer.toLowerCase() === profile?.vehicleBrand?.toLowerCase() &&
+              v.model.toLowerCase() === profile?.vehicleModel?.toLowerCase()
+          );
+
+          const recoveredVehicle: UserVehicle = {
+            id: profile.activeVehicleId || profile.vehicleId || `veh-${Date.now()}`,
+            userId: fbUser.uid,
+            category: catalogMatch?.category || '4-wheeler',
+            manufacturer: profile.vehicleBrand,
+            model: profile.vehicleModel,
+            variant: profile.vehicleVariant || catalogMatch?.variant || '',
+            batteryCapacitykWh: catalogMatch?.batteryCapacitykWh || 45.0,
+            usableCapacitykWh: catalogMatch?.usableCapacitykWh || 43.2,
+            estimatedRangeKm: catalogMatch?.estimatedRangeKm || 345,
+            currentBatteryPercent: 85,
+            estimatedHealthSOH: 98,
+            connectorTypes: catalogMatch?.connectorTypes || ['CCS2', 'Type2'],
+            acMaxPowerKW: catalogMatch?.acMaxPowerKW || 7.2,
+            dcMaxPowerKW: catalogMatch?.dcMaxPowerKW || 60.0,
+            isDefault: true,
+            dataSource: 'VERIFIED',
+            createdAt: new Date().toISOString(),
+          };
+
+          currentVehicles = [recoveredVehicle];
+          saveUserVehicle(recoveredVehicle).catch(err => console.warn('[AuthContext] Vehicle sync warning:', err));
+        }
+
+        if (currentVehicles.length > 0) {
+          setVehicles(currentVehicles);
+          const active =
+            currentVehicles.find(v => v.id === profile?.activeVehicleId) ||
+            currentVehicles.find(v => v.isDefault) ||
+            currentVehicles[0];
+          setActiveVehicleState(active);
+        } else if (profile.onboardingComplete) {
+          // Profile is marked complete, ensure active vehicle fallback is present
+          const defaultUserVehicle: UserVehicle = {
+            ...DEFAULT_VEHICLE,
+            userId: fbUser.uid,
+          };
+          setVehicles([defaultUserVehicle]);
+          setActiveVehicleState(defaultUserVehicle);
+          saveUserVehicle(defaultUserVehicle).catch(() => {});
+        } else {
+          // Brand new user without vehicles
+          setVehicles([]);
+          setActiveVehicleState(null);
+        }
+
+        setUser(profile);
+        setAuthoritativeRole(resolvedRole);
+      } catch (err) {
+        console.warn('[AuthContext] Error fetching authenticated user profile:', err);
+        setUser(null);
+        setAuthoritativeRole(null);
+      } finally {
+        setProfileLoading(false);
+        setRoleLoading(false);
+      }
     });
 
     return () => unsubscribe();
@@ -244,10 +256,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveVehicleState(active);
   }, [vehicles, user]);
 
-  const login = async (email: string, pass: string, role?: UserRole): Promise<UserProfile> => {
-    setLoading(true);
+  const login = async (email: string, pass: string, portalRole?: UserRole): Promise<UserProfile> => {
+    setAuthLoading(true);
+    setProfileLoading(true);
+    setRoleLoading(true);
     // Clear any previous session residue before authenticating
     setUser(null);
+    setAuthoritativeRole(null);
     localStorage.removeItem('vc_user');
 
     try {
@@ -255,11 +270,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let profile = await fetchUserProfile(fbUser.uid);
       if (!profile) {
         // If attempting to log into a restricted portal without a pre-existing profile, reject and clear auth session
-        if (role && role !== 'driver') {
+        if (portalRole && portalRole !== 'driver') {
           await logoutFirebase().catch(() => {});
           setUser(null);
+          setAuthoritativeRole(null);
           localStorage.removeItem('vc_user');
-          throw new Error(`Unauthorized: No registered ${role} profile found for this account.`);
+          throw new Error(`Unauthorized: No registered ${portalRole} profile found for this account.`);
         }
         profile = {
           uid: fbUser.uid,
@@ -278,54 +294,70 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (profile.status === 'SUSPENDED') {
           await logoutFirebase().catch(() => {});
           setUser(null);
+          setAuthoritativeRole(null);
           localStorage.removeItem('vc_user');
           throw new Error('This account has been suspended by administration. Please contact support.');
         }
 
+        // Authoritatively resolve role from Firestore
+        const roleRes = await resolveAuthoritativeRole(fbUser.uid);
+        const resolvedRole: UserRole = roleRes || (profile.role as UserRole) || 'driver';
+
         // Authoritative role validation if logging into the Driver portal
-        if (role === 'driver') {
-          if (profile.role === 'admin' || profile.role === 'super_admin') {
+        if (portalRole === 'driver') {
+          if (resolvedRole === 'admin' || resolvedRole === 'super_admin') {
             await logoutFirebase().catch(() => {});
             setUser(null);
+            setAuthoritativeRole(null);
             localStorage.removeItem('vc_user');
             throw new Error("This account has Administrator privileges. Please sign in via the Admin Command Center at /login/admin.");
           }
-          if (profile.role === 'partner') {
+          if (resolvedRole === 'partner') {
             await logoutFirebase().catch(() => {});
             setUser(null);
+            setAuthoritativeRole(null);
             localStorage.removeItem('vc_user');
             throw new Error("This account is registered as a CPO Partner. Please sign in via the Partner Portal at /login/partner.");
           }
-          if (profile.role === 'technician') {
+          if (resolvedRole === 'technician') {
             await logoutFirebase().catch(() => {});
             setUser(null);
+            setAuthoritativeRole(null);
             localStorage.removeItem('vc_user');
             throw new Error("This account is registered as a Field Technician. Please sign in via the Technician Portal at /login/technician.");
           }
         }
 
         // Authoritative role validation if portal requested specific role
-        if (role && role !== 'driver') {
+        if (portalRole && portalRole !== 'driver') {
           const isAllowed =
-            profile.role === role ||
-            (role === 'admin' && profile.role === 'super_admin') ||
-            (role === 'partner' && (profile.role === 'admin' || profile.role === 'super_admin')) ||
-            (role === 'technician' && (profile.role === 'admin' || profile.role === 'super_admin'));
+            resolvedRole === portalRole ||
+            (portalRole === 'admin' && resolvedRole === 'super_admin') ||
+            (portalRole === 'partner' && (resolvedRole === 'admin' || resolvedRole === 'super_admin')) ||
+            (portalRole === 'technician' && (resolvedRole === 'admin' || resolvedRole === 'super_admin'));
 
           if (!isAllowed) {
             await logoutFirebase().catch(() => {});
             setUser(null);
+            setAuthoritativeRole(null);
             localStorage.removeItem('vc_user');
-            throw new Error(`Unauthorized: User role '${profile.role}' does not have '${role}' access privileges.`);
+            throw new Error(`Unauthorized: User role '${resolvedRole}' does not have '${portalRole}' access privileges.`);
           }
         }
 
         profile.lastLoginAt = new Date().toISOString();
         await saveUserProfile(profile);
       }
+
+      const finalRoleRes = await resolveAuthoritativeRole(fbUser.uid);
+      const finalRole: UserRole = finalRoleRes || (profile.role as UserRole) || 'driver';
+
       setUser(profile);
+      setAuthoritativeRole(finalRole);
       return profile;
     } catch (err: any) {
+      setUser(null);
+      setAuthoritativeRole(null);
       const rawMsg = err?.message || '';
       const friendlyMsg = rawMsg.startsWith('Unauthorized:') || rawMsg.includes('suspended') || rawMsg.includes('privileges') || rawMsg.includes('registered as')
         ? rawMsg
@@ -333,12 +365,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('[AuthContext] Login error:', err);
       throw new Error(friendlyMsg);
     } finally {
-      setLoading(false);
+      setAuthLoading(false);
+      setProfileLoading(false);
+      setRoleLoading(false);
     }
   };
 
   const loginGoogle = async (): Promise<UserProfile> => {
-    setLoading(true);
+    setAuthLoading(true);
+    setProfileLoading(true);
+    setRoleLoading(true);
     try {
       const fbUser = await loginWithGoogle();
       let profile = await fetchUserProfile(fbUser.uid);
@@ -361,19 +397,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile.lastLoginAt = new Date().toISOString();
         await saveUserProfile(profile);
       }
+
+      const roleRes = await resolveAuthoritativeRole(fbUser.uid);
+      const finalRole: UserRole = roleRes || (profile.role as UserRole) || 'driver';
+
       setUser(profile);
+      setAuthoritativeRole(finalRole);
       return profile;
     } catch (err: any) {
       const friendlyMsg = getAuthErrorMessage(err);
       console.error('[AuthContext] Google sign-in error:', err);
       throw new Error(friendlyMsg);
     } finally {
-      setLoading(false);
+      setAuthLoading(false);
+      setProfileLoading(false);
+      setRoleLoading(false);
     }
   };
 
   const signup = async (name: string, email: string, pass: string, _role: UserRole = 'driver'): Promise<UserProfile> => {
-    setLoading(true);
+    setAuthLoading(true);
+    setProfileLoading(true);
+    setRoleLoading(true);
     try {
       // Public signup is strictly locked to driver role to prevent self-elevation
       const fbUser = await registerWithFirebase(email, pass);
@@ -390,13 +435,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       await saveUserProfile(profile);
       setUser(profile);
+      setAuthoritativeRole('driver');
       return profile;
     } catch (err: any) {
       const friendlyMsg = getAuthErrorMessage(err);
       console.error('[AuthContext] Signup error:', err);
       throw new Error(friendlyMsg);
     } finally {
-      setLoading(false);
+      setAuthLoading(false);
+      setProfileLoading(false);
+      setRoleLoading(false);
     }
   };
 
@@ -417,6 +465,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('[AuthContext] Firebase logout warning:', err);
     } finally {
       setUser(null);
+      setAuthoritativeRole(null);
       setVehicles([]);
       setActiveVehicleState(null);
       localStorage.removeItem('vc_user');
@@ -434,6 +483,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const updated = { ...user, role: newRole };
       setUser(updated);
+      setAuthoritativeRole(newRole);
       updateUserRole(user.uid, newRole);
     }
   };
@@ -446,21 +496,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const addVehicle = (newVehicleData: Omit<UserVehicle, 'id' | 'userId' | 'createdAt'>) => {
-    const newVehicle: UserVehicle = {
-      ...newVehicleData,
-      id: `veh-${Date.now()}`,
-      userId: user?.uid || 'default-user',
-      createdAt: new Date().toISOString(),
-    };
-
-    const updated = vehicles.filter(v => v.id !== 'veh-nexon-ev-45').map(v => ({ ...v, isDefault: false }));
-    updated.push({ ...newVehicle, isDefault: true });
-
-    setVehicles(updated);
-    setActiveVehicleState(newVehicle);
-
-    if (user?.uid) {
+  const addVehicle = (vehicle: Omit<UserVehicle, 'id' | 'userId' | 'createdAt'>) => {
+    if (user) {
+      const newVehicle: UserVehicle = {
+        ...vehicle,
+        id: `veh-${Date.now()}`,
+        userId: user.uid,
+        createdAt: new Date().toISOString(),
+      };
+      const updatedVehicles = [...vehicles, newVehicle];
+      setVehicles(updatedVehicles);
+      setActiveVehicleState(newVehicle);
       saveUserVehicle(newVehicle);
       updateProfile({
         activeVehicleId: newVehicle.id,
@@ -475,16 +521,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateVehicle = (vehicleId: string, data: Partial<UserVehicle>) => {
     const updated = vehicles.map(v => (v.id === vehicleId ? { ...v, ...data, updatedAt: new Date().toISOString() } : v));
     setVehicles(updated);
+    const updatedActive = updated.find(v => v.id === vehicleId);
+    if (updatedActive && activeVehicle?.id === vehicleId) {
+      setActiveVehicleState(updatedActive);
+    }
     const target = updated.find(v => v.id === vehicleId);
-    if (target && activeVehicle?.id === vehicleId) {
-      setActiveVehicleState(target);
-      if (user?.uid) {
-        saveUserVehicle(target);
-      }
+    if (target) {
+      saveUserVehicle(target);
     }
   };
 
-  // Authoritative Global Starting Battery SOC Updater
   const updateActiveVehicleSOC = (socPercent: number) => {
     const clamped = Math.max(0, Math.min(100, Math.round(socPercent)));
     if (activeVehicle) {
@@ -493,10 +539,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const removeVehicle = (vehicleId: string) => {
-    const updated = vehicles.filter(v => v.id !== vehicleId);
-    setVehicles(updated);
-    if (activeVehicle?.id === vehicleId && updated.length > 0) {
-      setActiveVehicleState(updated[0]);
+    const remaining = vehicles.filter(v => v.id !== vehicleId);
+    setVehicles(remaining);
+    if (activeVehicle?.id === vehicleId) {
+      setActiveVehicleState(remaining[0] || null);
     }
   };
 
@@ -527,8 +573,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
-        role: user?.role || 'driver',
+        role: authoritativeRole,
+        authoritativeRole,
         loading,
+        authLoading,
+        roleLoading,
+        profileLoading,
         onboardingComplete: profileComplete,
         activeVehicle,
         vehicles,

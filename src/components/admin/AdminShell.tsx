@@ -66,8 +66,22 @@ export const AdminShell: React.FC<AdminShellProps> = ({ children }) => {
   };
 
   useEffect(() => {
-    console.log(`[PORTAL_RUNTIME] role=${role} uid=${user?.uid || 'anon'} pathname=${location.pathname} portal=admin component=AdminShell`);
-  }, [role, user?.uid, location.pathname]);
+    const driverEl = document.querySelector('[data-portal="driver"]');
+    if ((role === 'admin' || role === 'super_admin') && driverEl) {
+      console.error('[P0 PORTAL VIOLATION] Admin role attempted to render Driver portal.');
+    }
+    const stored = localStorage.getItem('vc_user');
+    const storedRole = stored ? JSON.parse(stored)?.role : 'none';
+    console.log(`[PORTAL_FORENSIC]
+pathname=${location.pathname}
+firebaseUid=${user?.uid || 'anon'}
+firebaseEmail=${user?.email || 'none'}
+firestoreRole=${user?.role || 'none'}
+authContextRole=${role || 'none'}
+storedRole=${storedRole}
+portal=admin
+expectedPortal=admin`);
+  }, [role, user?.uid, user?.email, user?.role, location.pathname]);
 
   return (
     <div data-portal="admin" className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
