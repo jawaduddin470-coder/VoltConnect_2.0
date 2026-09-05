@@ -31,9 +31,10 @@ export type StoryStage =
   | 'VEHICLE'
   | 'JOURNEY'
   | 'NETWORK'
-  | 'CHARGING'
   | 'VOICE_AI'
-  | 'PARTNERS_OPS'
+  | 'PARTNERS'
+  | 'OPERATIONS'
+  | 'CHARGING'
   | 'FINAL';
 
 interface StageTiming {
@@ -46,14 +47,15 @@ interface StageTiming {
 const TOTAL_DURATION_SEC = 12.5;
 
 const STAGES: StageTiming[] = [
-  { id: 'INTRO', start: 0.0, end: 1.5 },
-  { id: 'VEHICLE', start: 1.5, end: 3.0 },
-  { id: 'JOURNEY', start: 3.0, end: 4.5 },
-  { id: 'NETWORK', start: 4.5, end: 5.8 },
-  { id: 'CHARGING', start: 5.8, end: 10.5 },
-  { id: 'VOICE_AI', start: 10.5, end: 11.5 },
-  { id: 'PARTNERS_OPS', start: 11.5, end: 12.2 },
-  { id: 'FINAL', start: 12.2, end: 13.0 },
+  { id: 'INTRO', start: 0.0, end: 1.0 },
+  { id: 'VEHICLE', start: 1.0, end: 2.2 },
+  { id: 'JOURNEY', start: 2.2, end: 3.3 },
+  { id: 'NETWORK', start: 3.3, end: 4.5 },
+  { id: 'VOICE_AI', start: 4.5, end: 5.4 },
+  { id: 'PARTNERS', start: 5.4, end: 6.2 },
+  { id: 'OPERATIONS', start: 6.2, end: 7.0 },
+  { id: 'CHARGING', start: 7.0, end: 11.3 },
+  { id: 'FINAL', start: 11.3, end: 12.5 },
 ];
 
 export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
@@ -77,166 +79,222 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
   // Determine current active story stage (strictly ONE active stage at any millisecond)
   const activeStageObj =
     STAGES.find((s) => currentTime >= s.start && currentTime < s.end) ||
-    (currentTime >= 12.2 ? STAGES[7] : STAGES[0]);
+    (currentTime >= 11.3 ? STAGES[8] : STAGES[0]);
   const activeStage = activeStageObj.id;
 
-  // Single card lifecycle: 160ms enter, stable hold, 120ms exit (ABSOLUTELY ZERO OVERLAP)
+  // Single card lifecycle: swift entrance, stable hold, swift exit (ABSOLUTELY ZERO OVERLAP)
   const tau = currentTime - activeStageObj.start;
   const stageDuration = activeStageObj.end - activeStageObj.start;
   let cardOpacity = 1;
   let cardTranslateY = 0;
 
   if (activeStage === 'FINAL') {
-    const r = Math.min(1, Math.max(0, tau / 0.25));
+    const r = Math.min(1, Math.max(0, tau / 0.20));
     cardOpacity = r;
     cardTranslateY = (1 - r) * 10;
   } else {
-    if (tau < 0.16) {
-      // Clean 160ms entrance
-      const r = tau / 0.16;
+    const enterDuration = Math.min(0.12, stageDuration * 0.15);
+    const exitDuration = Math.min(0.10, stageDuration * 0.12);
+    if (tau < enterDuration) {
+      const r = tau / enterDuration;
       cardOpacity = Math.max(0, Math.min(1, r));
       cardTranslateY = (1 - r) * 8;
-    } else if (tau > stageDuration - 0.12) {
-      // Clean 120ms exit
-      const r = (stageDuration - tau) / 0.12;
+    } else if (tau > stageDuration - exitDuration) {
+      const r = (stageDuration - tau) / exitDuration;
       cardOpacity = Math.max(0, Math.min(1, r));
       cardTranslateY = -(1 - r) * 6;
     } else {
-      // Completely stable hold
       cardOpacity = 1;
       cardTranslateY = 0;
     }
   }
 
   // =========================================================================
-  // VEHICLE MOVEMENT: Slow, smooth, continuous camera anchor across 12.5s
+  // VEHICLE MOVEMENT: Continuous camera anchor across 12.5s
+  // 0.0 - 1.0s: INTRO — Enters immediately, visible on screen from frame 1
+  // 1.0 - 2.2s: VEHICLE — Cruising
+  // 2.2 - 3.3s: JOURNEY — Approaching network corridor
+  // 3.3 - 4.5s: NETWORK — Network visible
+  // 4.5 - 5.4s: VOICE AI — Assistant active while vehicle still approaching
+  // 5.4 - 6.2s: PARTNERS — CPO info while vehicle still approaching
+  // 6.2 - 7.0s: OPERATIONS — Ops info, vehicle near charging station
+  // 7.0 - 10.8s: ⚡ CHARGING WOW MOMENT (Approach -> Slow down -> Stop -> Connect -> 80%->100% -> READY -> Brief hold)
+  // 10.8 - 11.3s: DEPARTURE — Vehicle smoothly accelerates away after 100% READY
+  // 11.3 - 12.5s: FINAL ECOSYSTEM — Anchored on highway
   // =========================================================================
-  let carXvw = -15;
+  let carXvw = 0;
   let isBraking = false;
   let isCarStopped = false;
   let isDeparting = false;
   let roadAnim = 'roadDashAnim 1.0s linear infinite';
   let wheelAnim = 'wheelSpin 0.8s linear infinite';
 
-  if (currentTime < 1.5) {
-    // 01 INTRO: Enters smoothly onto highway
-    const u = currentTime / 1.5;
-    const ease = 1 - Math.pow(1 - u, 3);
-    carXvw = -15 + ease * 27; // -15vw -> 12vw
-  } else if (currentTime < 3.0) {
-    // 02 VEHICLE: Smoothly continues cruising
-    const u = (currentTime - 1.5) / 1.5;
-    carXvw = 12 + u * 15; // 12vw -> 27vw
+  if (currentTime < 1.0) {
+    // 0.0 - 1.0s: INTRO — Enters immediately (no blank opening, front of car visible from 0s)
+    const u = currentTime / 1.0;
+    const ease = 1 - Math.pow(1 - u, 2);
+    carXvw = 0 + ease * 14; // 0vw -> 14vw
+    roadAnim = 'roadDashAnim 1.0s linear infinite';
+    wheelAnim = 'wheelSpin 0.8s linear infinite';
+  } else if (currentTime < 2.2) {
+    // 1.0 - 2.2s: VEHICLE — Cruising smoothly
+    const u = (currentTime - 1.0) / 1.2;
+    carXvw = 14 + u * 12; // 14vw -> 26vw
+    roadAnim = 'roadDashAnim 1.0s linear infinite';
+    wheelAnim = 'wheelSpin 0.8s linear infinite';
+  } else if (currentTime < 3.3) {
+    // 2.2 - 3.3s: JOURNEY — Continues naturally toward charging network
+    const u = (currentTime - 2.2) / 1.1;
+    carXvw = 26 + u * 12; // 26vw -> 38vw
+    roadAnim = 'roadDashAnim 1.0s linear infinite';
+    wheelAnim = 'wheelSpin 0.8s linear infinite';
   } else if (currentTime < 4.5) {
-    // 03 JOURNEY: Smoothly cruises along highway corridor
-    const u = (currentTime - 3.0) / 1.5;
-    carXvw = 27 + u * 14; // 27vw -> 41vw
-  } else if (currentTime < 5.8) {
-    // 04 NETWORK: Approaches charging zone
-    const u = (currentTime - 4.5) / 1.3;
-    carXvw = 41 + u * 13; // 41vw -> 54vw
-  } else if (currentTime < 6.6) {
-    // 05 CHARGING: Smooth deceleration curve into charging bay (velocity -> 0)
-    isBraking = true;
-    const u = (currentTime - 5.8) / 0.8;
-    const ease = 1 - Math.pow(1 - u, 2.2);
-    carXvw = 54 + ease * 11; // 54vw -> 65vw
-    roadAnim = 'roadDashAnim 2.2s linear infinite'; // Visibly slowing down
-    wheelAnim = 'wheelSpin 2.0s linear infinite';
-  } else if (currentTime < 10.5) {
-    // 05 CHARGING: Complete physical stop at charging pedestal
-    carXvw = 65;
-    isCarStopped = true;
-    roadAnim = 'none'; // Completely stationary
-    wheelAnim = 'none';
-  } else if (currentTime < 11.2) {
-    // 05 CHARGING: Smooth departure acceleration
-    isDeparting = true;
-    const u = (currentTime - 10.5) / 0.7;
-    carXvw = 65 + Math.pow(u, 2) * 12; // 65vw -> 77vw
+    // 3.3 - 4.5s: NETWORK — Charging stations visible
+    const u = (currentTime - 3.3) / 1.2;
+    carXvw = 38 + u * 11; // 38vw -> 49vw
+    roadAnim = 'roadDashAnim 1.1s linear infinite';
+    wheelAnim = 'wheelSpin 0.9s linear infinite';
+  } else if (currentTime < 5.4) {
+    // 4.5 - 5.4s: VOICE AI — Voice AI appears while vehicle is still approaching
+    const u = (currentTime - 4.5) / 0.9;
+    carXvw = 49 + u * 8; // 49vw -> 57vw
+    roadAnim = 'roadDashAnim 1.2s linear infinite';
+    wheelAnim = 'wheelSpin 0.9s linear infinite';
+  } else if (currentTime < 6.2) {
+    // 5.4 - 6.2s: PARTNERS — Partner info appears, vehicle still approaching
+    const u = (currentTime - 5.4) / 0.8;
+    carXvw = 57 + u * 5; // 57vw -> 62vw
     roadAnim = 'roadDashAnim 1.3s linear infinite';
-    wheelAnim = 'wheelSpin 1.1s linear infinite';
+    wheelAnim = 'wheelSpin 1.0s linear infinite';
+  } else if (currentTime < 7.0) {
+    // 6.2 - 7.0s: OPERATIONS — Ops info appears, vehicle very close to bay
+    const u = (currentTime - 6.2) / 0.8;
+    carXvw = 62 + u * 3.5; // 62vw -> 65.5vw
+    roadAnim = 'roadDashAnim 1.5s linear infinite';
+    wheelAnim = 'wheelSpin 1.2s linear infinite';
+  } else if (currentTime < 7.3) {
+    // 7.0 - 7.3s: CHARGING (Approach) — Brakes activate
+    isBraking = true;
+    const u = (currentTime - 7.0) / 0.3;
+    carXvw = 65.5 + u * 1.5; // 65.5vw -> 67vw
+    roadAnim = 'roadDashAnim 2.5s linear infinite';
+    wheelAnim = 'wheelSpin 2.0s linear infinite';
+  } else if (currentTime < 7.6) {
+    // 7.3 - 7.6s: CHARGING (Slow down) — Settling into bay
+    isBraking = true;
+    const u = (currentTime - 7.3) / 0.3;
+    carXvw = 67 + u * 1.0; // 67vw -> 68vw
+    roadAnim = 'roadDashAnim 4.0s linear infinite';
+    wheelAnim = 'wheelSpin 3.5s linear infinite';
+  } else if (currentTime < 10.8) {
+    // 7.6 - 10.8s: CHARGING (Stop, Connect, 80%->100% Active Charge, 100% Hold, READY)
+    carXvw = 68;
+    isCarStopped = true;
+    roadAnim = 'none';
+    wheelAnim = 'none';
+  } else if (currentTime < 11.3) {
+    // 10.8 - 11.3s: DEPARTURE — Smooth acceleration after reaching 100% READY
+    isDeparting = true;
+    const u = (currentTime - 10.8) / 0.5;
+    carXvw = 68 + Math.pow(u, 1.8) * 11; // 68vw -> 79vw
+    roadAnim = 'roadDashAnim 1.2s linear infinite';
+    wheelAnim = 'wheelSpin 0.9s linear infinite';
   } else {
-    // 06-08: Anchored in view on right side of highway
-    carXvw = 77;
+    // 11.3 - 12.5s: FINAL ECOSYSTEM — Anchored smoothly
+    carXvw = 79;
     roadAnim = 'roadDashAnim 1.0s linear infinite';
     wheelAnim = 'wheelSpin 0.8s linear infinite';
   }
 
   // Pure hardware state flags
-  const isMoving = (currentTime < 6.6) || currentTime >= 10.5;
-  const isChargingConnected = currentTime >= 6.8 && currentTime < 10.5;
+  const isMoving = (currentTime < 7.6) || currentTime >= 10.8;
+  const isChargingConnected = currentTime >= 7.8 && currentTime < 10.8;
 
   // =========================================================================
-  // ⚡ 05 CHARGING WOW MOMENT (5.8s – 10.5s | 4.7 full seconds)
-  // 80% -> 84% -> 88% -> 92% -> 96% -> 100% -> HOLD -> READY
+  // ⚡ CHARGING WOW MOMENT (7.0s – 10.8s) + DEPARTURE (10.8s - 11.3s)
+  // Approach -> Slow down -> Stop -> Connect -> 80% -> 84% -> 88% -> 92% -> 96% -> 100% -> HOLD -> READY
   // =========================================================================
   let liveSOC = 80;
-  let chargingPhase: 'APPROACH' | 'STOP' | 'CONNECT' | 'CHARGING' | 'HOLD_100' | 'READY' | 'DEPART' = 'APPROACH';
+  let chargingPhase:
+    | 'APPROACH'
+    | 'SLOW_DOWN'
+    | 'STOP'
+    | 'CONNECT'
+    | 'CHARGING'
+    | 'HOLD_100'
+    | 'READY'
+    | 'DEPART' = 'APPROACH';
 
-  if (currentTime < 5.8) {
+  if (currentTime < 7.0) {
     liveSOC = 80;
     chargingPhase = 'APPROACH';
-  } else if (currentTime < 6.6) {
+  } else if (currentTime < 7.3) {
     chargingPhase = 'APPROACH';
     liveSOC = 80;
-  } else if (currentTime < 6.8) {
+  } else if (currentTime < 7.6) {
+    chargingPhase = 'SLOW_DOWN';
+    liveSOC = 80;
+  } else if (currentTime < 7.8) {
     chargingPhase = 'STOP';
     liveSOC = 80;
-  } else if (currentTime < 7.1) {
+  } else if (currentTime < 8.1) {
     chargingPhase = 'CONNECT';
     liveSOC = 80;
-  } else if (currentTime < 9.6) {
-    // 2.5s visible charging progression (0.5s per step: 80->84->88->92->96->100)
+  } else if (currentTime < 10.3) {
+    // 8.1s - 10.3s (2.2s stepped 80 -> 84 -> 88 -> 92 -> 96 -> 100)
     chargingPhase = 'CHARGING';
-    const u = (currentTime - 7.1) / 2.5;
+    const u = (currentTime - 8.1) / 2.2;
     liveSOC = Math.min(100, Math.round(80 + u * 20));
-  } else if (currentTime < 10.0) {
-    // 100% Hold (400ms)
+  } else if (currentTime < 10.5) {
+    // 100% Hold (200ms)
     chargingPhase = 'HOLD_100';
     liveSOC = 100;
-  } else if (currentTime < 10.5) {
-    // READY State (500ms)
+  } else if (currentTime < 10.8) {
+    // READY State + brief hold (300ms)
     chargingPhase = 'READY';
     liveSOC = 100;
   } else {
+    // Departure (10.8s - 11.3s)
     chargingPhase = 'DEPART';
     liveSOC = 100;
   }
 
-  const isChargingActive = currentTime >= 7.1 && currentTime < 9.6;
-  const isChargeComplete = currentTime >= 9.6;
+  const isChargingActive = currentTime >= 8.1 && currentTime < 10.3;
+  const isChargeComplete = currentTime >= 10.3;
 
   // Pedestal Digital Status Display Strings
-  const pedestalText1 = isChargeComplete
-    ? 'READY'
-    : isChargingActive
-    ? `${liveSOC}%`
-    : isChargingConnected
-    ? 'CONNECTED'
-    : isCarStopped
-    ? 'STANDBY'
-    : isBraking
-    ? 'BAY 02'
-    : 'STANDBY';
+  const pedestalText1 =
+    chargingPhase === 'READY' || chargingPhase === 'DEPART'
+      ? 'READY'
+      : chargingPhase === 'HOLD_100'
+      ? '100%'
+      : isChargingActive
+      ? `${liveSOC}%`
+      : chargingPhase === 'CONNECT'
+      ? 'SYNC'
+      : chargingPhase === 'STOP' || chargingPhase === 'SLOW_DOWN'
+      ? 'STANDBY'
+      : 'IDLE';
 
-  const pedestalText2 = isChargeComplete
-    ? '100% SOH'
-    : isChargingActive
-    ? '150 kW'
-    : isChargingConnected
-    ? 'DC FAST'
-    : '150 kW MAX';
+  const pedestalText2 =
+    chargingPhase === 'READY' || chargingPhase === 'DEPART'
+      ? 'DEPART'
+      : chargingPhase === 'HOLD_100'
+      ? 'COMPLETE'
+      : isChargingActive
+      ? '150 kW'
+      : chargingPhase === 'CONNECT'
+      ? 'DC FAST'
+      : 'BAY 02';
 
-  const pedestalStripColor = isChargeComplete
-    ? '#10B981'
-    : isChargingActive
-    ? '#38BDF8'
-    : isChargingConnected
-    ? '#0EA5E9'
-    : isCarStopped
-    ? '#F59E0B'
-    : '#334155';
+  const pedestalStripColor =
+    isChargeComplete || chargingPhase === 'READY' || chargingPhase === 'DEPART'
+      ? '#10B981'
+      : isChargingActive
+      ? '#38BDF8'
+      : chargingPhase === 'CONNECT'
+      ? '#F59E0B'
+      : '#334155';
 
   return (
     <div className="absolute inset-0 w-full h-full bg-[#030712] overflow-hidden select-none font-sans">
@@ -586,14 +644,115 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
               </div>
             )}
 
-            {/* ⚡ 05 — CHARGING WOW MOMENT (5.8s – 10.5s | 4.7s) */}
+            {/* 05 — VOICE AI (4.5s – 5.4s) — Appears while vehicle is approaching charger */}
+            {activeStage === 'VOICE_AI' && (
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-mono font-bold uppercase tracking-wider shadow-md">
+                  <Mic className="w-3.5 h-3.5 text-purple-400" />
+                  <span>VOLT VOICE AI • 62 INTENTS</span>
+                </div>
+                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Your assistant. Always ready.
+                </h2>
+                {/* Seamless Voice AI Utterance Dialog */}
+                <div className="bg-slate-950/95 border border-purple-500/30 p-4 rounded-2xl shadow-xl space-y-3 max-w-lg mx-auto">
+                  <div className="flex items-center justify-between gap-3 text-left">
+                    <div className="flex items-center gap-2.5 max-w-[48%]">
+                      <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
+                        <Mic className="w-4 h-4 text-sky-400" />
+                      </div>
+                      <div className="text-xs text-slate-300 italic">"Find the best charging stop on my route."</div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 max-w-[50%] justify-end text-right">
+                      <div className="text-xs text-emerald-300 font-semibold">"Charging stop optimized. 150 kW DC routed."</div>
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                        <Sparkles className="w-4 h-4 text-emerald-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 06 — PARTNERS (5.4s – 6.2s) — Vehicle is still approaching */}
+            {activeStage === 'PARTNERS' && (
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 shadow-md">
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>CPO PARTNER ECOSYSTEM</span>
+                </div>
+                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Partners power the network.
+                </h2>
+                <div className="bg-slate-950/95 border border-emerald-500/30 p-3.5 sm:p-4 rounded-2xl shadow-lg space-y-2 max-w-md mx-auto text-left">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-emerald-400" /> Partner CPO Command
+                    </span>
+                    <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                      LIVE SYNC
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Verified Hubs</div>
+                      <div className="text-xs font-extrabold text-emerald-400 font-mono">8 Live</div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Total Power</div>
+                      <div className="text-xs font-extrabold text-sky-400 font-mono">1,420 kW</div>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-400 text-center">CPOs register stations, set tariffs, and stream telemetry.</div>
+                </div>
+              </div>
+            )}
+
+            {/* 07 — OPERATIONS (6.2s – 7.0s) — Vehicle is now close to bay */}
+            {activeStage === 'OPERATIONS' && (
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-sky-500/40 text-xs font-mono font-bold text-sky-400 shadow-md">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>CENTRAL OPERATIONS & AUDIT</span>
+                </div>
+                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Operations keep it moving.
+                </h2>
+                <div className="bg-slate-950/95 border border-sky-500/30 p-3.5 sm:p-4 rounded-2xl shadow-lg space-y-2 max-w-md mx-auto text-left">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-sky-400" /> Admin Command Center
+                    </span>
+                    <span className="text-[9px] font-mono font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-md">
+                      GOVERNANCE
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Stations</div>
+                      <div className="text-xs font-extrabold text-sky-400 font-mono">1,766 Active</div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Uptime</div>
+                      <div className="text-xs font-extrabold text-teal-400 font-mono">99.9% Health</div>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-400 text-center">Central operations, verification, and network audit logs.</div>
+                </div>
+              </div>
+            )}
+
+            {/* ⚡ 08 — CHARGING WOW MOMENT & CLIMAX (7.0s – 11.3s) */}
             {activeStage === 'CHARGING' && (
               <div className="space-y-3">
                 {/* Status Pill Badge */}
                 <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-extrabold uppercase tracking-wider shadow-md">
                   <Zap className="w-3.5 h-3.5 fill-current animate-pulse" />
                   <span>
-                    {chargingPhase === 'READY'
+                    {chargingPhase === 'DEPART'
+                      ? 'READY TO DEPART • 100% SOH'
+                      : chargingPhase === 'READY'
                       ? 'READY TO DEPART • 100% SOH'
                       : chargingPhase === 'HOLD_100'
                       ? 'CHARGE COMPLETE • 100% SOH'
@@ -603,12 +762,16 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
                       ? 'CHARGER CONNECTED • 150 kW DC'
                       : chargingPhase === 'STOP'
                       ? 'ALIGNED IN CHARGING BAY 02'
+                      : chargingPhase === 'SLOW_DOWN'
+                      ? 'SLOWING DOWN • BAY 02'
                       : 'APPROACHING CHARGING BAY'}
                   </span>
                 </div>
 
                 <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-                  {chargingPhase === 'READY'
+                  {chargingPhase === 'DEPART'
+                    ? 'Ready to depart.'
+                    : chargingPhase === 'READY'
                     ? 'READY TO DEPART'
                     : isChargeComplete
                     ? 'Fully charged. Ready for the road.'
@@ -670,13 +833,15 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
                       <span className="text-slate-300">
-                        {chargingPhase === 'READY'
-                          ? 'READY'
+                        {chargingPhase === 'DEPART' || chargingPhase === 'READY'
+                          ? 'READY TO DEPART'
                           : isChargeComplete
                           ? 'Ready to Depart'
                           : isChargingActive
                           ? '150 kW DC Ultra Fast'
-                          : 'Connecting Protocol'}
+                          : chargingPhase === 'CONNECT'
+                          ? 'DC Fast Cable Connected'
+                          : 'Docking Protocol'}
                       </span>
                     </div>
 
@@ -687,72 +852,11 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
                 </div>
               </div>
             )}
-
-            {/* 06 — VOICE AI (10.5s – 11.5s) */}
-            {activeStage === 'VOICE_AI' && (
-              <div className="space-y-3">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-mono font-bold uppercase tracking-wider shadow-md">
-                  <Mic className="w-3.5 h-3.5 text-purple-400" />
-                  <span>VOLT VOICE AI • 62 INTENTS</span>
-                </div>
-                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-                  Your assistant. Always ready.
-                </h2>
-                {/* Seamless Voice AI Utterance Dialog */}
-                <div className="bg-slate-950/95 border border-purple-500/30 p-4 rounded-2xl shadow-xl space-y-3 max-w-lg mx-auto">
-                  <div className="flex items-center justify-between gap-3 text-left">
-                    <div className="flex items-center gap-2.5 max-w-[48%]">
-                      <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
-                        <Mic className="w-4 h-4 text-sky-400" />
-                      </div>
-                      <div className="text-xs text-slate-300 italic">"Find the best charging stop on my route."</div>
-                    </div>
-
-                    <div className="flex items-center gap-2.5 max-w-[50%] justify-end text-right">
-                      <div className="text-xs text-emerald-300 font-semibold">"Charging stop optimized. 150 kW DC routed."</div>
-                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
-                        <Sparkles className="w-4 h-4 text-emerald-400" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 07 — COMBINED: PARTNERS + OPERATIONS (11.5s – 12.2s) */}
-            {activeStage === 'PARTNERS_OPS' && (
-              <div className="space-y-3">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 shadow-md">
-                  <Building2 className="w-3.5 h-3.5" />
-                  <span>PARTNERS + OPERATIONS = RELIABLE ECOSYSTEM</span>
-                </div>
-                <div className="space-y-1">
-                  <h2 className="font-heading text-xl sm:text-3xl font-extrabold text-white tracking-tight">
-                    Partners power the network.
-                  </h2>
-                  <p className="text-sm sm:text-base text-cyan-300 font-bold">
-                    Operations keep it moving.
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-2.5 max-w-md mx-auto text-left pt-0.5">
-                  <div className="p-2.5 rounded-xl bg-slate-950/95 border border-emerald-500/30 text-center space-y-1">
-                    <div className="text-[9px] font-mono text-emerald-400 font-bold uppercase">CPO Partners</div>
-                    <div className="text-xs sm:text-sm font-extrabold text-white font-mono">8 Live Hubs</div>
-                    <div className="text-[9px] text-slate-400">1,420 kW Live Power</div>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-950/95 border border-sky-500/30 text-center space-y-1">
-                    <div className="text-[9px] font-mono text-sky-400 font-bold uppercase">Operations</div>
-                    <div className="text-xs sm:text-sm font-extrabold text-white font-mono">1,766 Stations</div>
-                    <div className="text-[9px] text-slate-400">99.9% Health Uptime</div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
         {/* ================================================================= */}
-        {/* 6. FINAL CLIMAX ECOSYSTEM REVEAL (12.2s – 13.0s+) */}
+        {/* 6. FINAL CLIMAX ECOSYSTEM REVEAL (11.3s – 12.5s) */}
         {/* ================================================================= */}
         {activeStage === 'FINAL' && (
           <div
