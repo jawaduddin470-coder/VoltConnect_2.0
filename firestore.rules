@@ -29,14 +29,14 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && (
         (request.auth.token.role == 'admin' || request.auth.token.role == 'super_admin') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (getUserData().role == 'admin' || getUserData().role == 'super_admin'))
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (getUserData().role == 'admin' || getUserData().role == 'super_admin' || getUserData().role.lower() == 'admin' || getUserData().role.lower() == 'super_admin'))
       );
     }
 
     function isPartner() {
       return isAuthenticated() && (
         (request.auth.token.role == 'partner') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'partner') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (getUserData().role == 'partner' || getUserData().role.lower() == 'partner')) ||
         isAdmin()
       );
     }
@@ -44,7 +44,7 @@ service cloud.firestore {
     function isTechnician() {
       return isAuthenticated() && (
         (request.auth.token.role == 'technician') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'technician') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (getUserData().role == 'technician' || getUserData().role.lower() == 'technician')) ||
         isAdmin()
       );
     }
@@ -65,14 +65,17 @@ service cloud.firestore {
       allow create: if isAdmin() || (
         isPartner() &&
         request.resource.data.createdBy == request.auth.uid &&
-        request.resource.data.verificationStatus == 'pending'
+        (request.resource.data.verificationStatus == 'pending' || request.resource.data.verificationStatus == 'draft')
       );
       allow update: if isAdmin() || (
         isPartner() &&
         resource.data.createdBy == request.auth.uid &&
         (
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['verificationStatus', 'admin_verified']) ||
-          (request.resource.data.verificationStatus == 'pending' && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['admin_verified']))
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['admin_verified']) &&
+          (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['verificationStatus']) ||
+            request.resource.data.verificationStatus == 'pending'
+          )
         )
       );
       allow delete: if isAdmin();

@@ -74,7 +74,19 @@ export const AdminStationsView: React.FC = () => {
 
   useEffect(() => {
     fetchStationsData();
+    const unsubscribe = chargingDataService.subscribeToStations((updatedStations) => {
+      setStations(updatedStations);
+    });
+    return () => unsubscribe();
   }, []);
+
+  // Status helper predicates
+  const isApproved = (st: ChargingStation) =>
+    st.verificationStatus === 'approved' || st.verificationStatus === 'verified' || st.admin_verified === true;
+  const isPending = (st: ChargingStation) =>
+    st.verificationStatus === 'pending' || st.verificationStatus === 'under_review';
+  const isRejected = (st: ChargingStation) =>
+    st.verificationStatus === 'rejected';
 
   // Multi-Filter Logic
   const filteredStations = stations.filter(st => {
@@ -108,7 +120,11 @@ export const AdminStationsView: React.FC = () => {
     }
 
     // 6. Verification Status Filter
-    if (selectedVerification !== 'ALL' && st.verificationStatus !== selectedVerification) return false;
+    if (selectedVerification !== 'ALL') {
+      if (selectedVerification === 'approved' && !isApproved(st)) return false;
+      if (selectedVerification === 'pending' && !isPending(st)) return false;
+      if (selectedVerification === 'rejected' && !isRejected(st)) return false;
+    }
 
     // 7. Source Filter
     if (selectedSource !== 'ALL' && st.dataSource !== selectedSource) return false;
@@ -117,7 +133,11 @@ export const AdminStationsView: React.FC = () => {
     if (selectedStatus !== 'ALL' && st.status !== selectedStatus) return false;
 
     // 9. Verification Tab Filter
-    if (verificationTab !== 'ALL' && st.verificationStatus !== verificationTab) return false;
+    if (verificationTab !== 'ALL') {
+      if (verificationTab === 'approved' && !isApproved(st)) return false;
+      if (verificationTab === 'pending' && !isPending(st)) return false;
+      if (verificationTab === 'rejected' && !isRejected(st)) return false;
+    }
 
     return true;
   });
@@ -133,7 +153,7 @@ export const AdminStationsView: React.FC = () => {
     chargingDataService.clearCache();
     fetchStationsData();
     if (selectedStation?.id === station.id) {
-      setSelectedStation({ ...selectedStation, verificationStatus: 'approved', admin_verified: true });
+      setSelectedStation({ ...selectedStation, verificationStatus: 'verified', admin_verified: true, status: 'active' });
     }
   };
 
@@ -327,9 +347,9 @@ export const AdminStationsView: React.FC = () => {
           }`}
         >
           <span>Pending Verification</span>
-          {stations.filter(s => s.verificationStatus === 'pending').length > 0 && (
+          {stations.filter(isPending).length > 0 && (
             <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-400 text-slate-950">
-              {stations.filter(s => s.verificationStatus === 'pending').length}
+              {stations.filter(isPending).length}
             </span>
           )}
         </button>
@@ -341,7 +361,7 @@ export const AdminStationsView: React.FC = () => {
               : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
           }`}
         >
-          Approved ({stations.filter(s => s.verificationStatus === 'approved').length})
+          Approved ({stations.filter(isApproved).length})
         </button>
         <button
           onClick={() => { setVerificationTab('rejected'); setCurrentPage(1); }}
@@ -351,7 +371,7 @@ export const AdminStationsView: React.FC = () => {
               : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
           }`}
         >
-          Rejected ({stations.filter(s => s.verificationStatus === 'rejected').length})
+          Rejected ({stations.filter(isRejected).length})
         </button>
       </div>
 
@@ -550,13 +570,13 @@ export const AdminStationsView: React.FC = () => {
                       {/* Verification */}
                       <td className="py-3 px-3">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                          st.verificationStatus === 'approved' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
-                          st.verificationStatus === 'pending' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                          isApproved(st) ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                          isPending(st) ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
                           'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                         }`}>
-                          {st.verificationStatus}
+                          {isApproved(st) ? 'VERIFIED' : isPending(st) ? 'PENDING' : 'REJECTED'}
                         </span>
-                        {st.verificationStatus === 'rejected' && st.rejectionReason && (
+                        {isRejected(st) && st.rejectionReason && (
                           <span
                             title={`Rejection Reason: ${st.rejectionReason}`}
                             className="text-[9px] text-rose-400 block font-normal truncate max-w-[120px] mt-0.5"
@@ -576,7 +596,7 @@ export const AdminStationsView: React.FC = () => {
                           View
                         </button>
 
-                        {st.verificationStatus === 'pending' ? (
+                        {isPending(st) ? (
                           <>
                             <button
                               onClick={() => handleApproveStation(st)}
@@ -593,7 +613,7 @@ export const AdminStationsView: React.FC = () => {
                               Reject
                             </button>
                           </>
-                        ) : st.verificationStatus === 'approved' ? (
+                        ) : isApproved(st) ? (
                           <button
                             onClick={() => handleOpenRejectModal(st)}
                             className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white font-bold text-[10px]"
@@ -824,19 +844,19 @@ export const AdminStationsView: React.FC = () => {
                 <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
                   
                   <div className="flex items-center gap-2">
-                    {selectedStation.verificationStatus !== 'approved' ? (
+                    {!isApproved(selectedStation) ? (
                       <button
                         onClick={() => handleVerifyStation(selectedStation, true)}
                         className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md"
                       >
-                        <Check className="w-4 h-4" /> Verify Station
+                        <Check className="w-4 h-4" /> Verify & Publish
                       </button>
                     ) : (
                       <button
                         onClick={() => handleVerifyStation(selectedStation, false)}
                         className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-amber-600 text-amber-300 font-bold text-xs flex items-center gap-1.5"
                       >
-                        <RotateCcw className="w-4 h-4" /> Unverify Station
+                        <RotateCcw className="w-4 h-4" /> Revoke Verification
                       </button>
                     )}
 
@@ -893,6 +913,32 @@ export const AdminStationsView: React.FC = () => {
             <div className="space-y-1 text-xs">
               <div className="font-bold text-white">{rejectingStation.name}</div>
               <div className="text-slate-400">{rejectingStation.address}, {rejectingStation.city}</div>
+              {rejectingStation.partnerId && (
+                <div className="text-slate-500 font-mono text-[10px]">Partner UID: {rejectingStation.partnerId}</div>
+              )}
+            </div>
+
+            {/* Quick Reason Presets */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-400">Quick Reason Templates</label>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Inaccurate GPS coordinates or location pin mismatch',
+                  'Incomplete hardware or connector specifications',
+                  'Tariff rate missing or outside regulatory band',
+                  'Restricted public access or missing entry instructions',
+                  'Hardware reported offline or failed handshake test'
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setRejectionReason(preset)}
+                    className="text-[10px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors text-left"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -903,7 +949,7 @@ export const AdminStationsView: React.FC = () => {
                 value={rejectionReason}
                 onChange={e => setRejectionReason(e.target.value)}
                 placeholder="Specify reason, e.g., missing electrical safety certification, wrong GPS pin, unsupported tariff, or offline hardware..."
-                className="w-full h-28 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 font-medium focus:outline-none focus:border-rose-500"
+                className="w-full h-24 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 font-medium focus:outline-none focus:border-rose-500"
                 required
               />
               <p className="text-[10px] text-slate-400">

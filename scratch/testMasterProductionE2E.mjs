@@ -78,7 +78,7 @@ assert(partnerDashboard.includes('CPO Profile'), 'PartnerDashboard provides CPO 
 
 // 7. Check chargingDataService (Conditions 2 & 7)
 const chargingService = fs.readFileSync(path.join(rootDir, 'src/services/chargingDataService.ts'), 'utf8');
-assert(chargingService.includes("s.verificationStatus === 'approved' && s.status !== 'inactive'"), 'chargingDataService filters pending, rejected, and inactive stations from public driver feed');
+assert(chargingService.includes("(s.verificationStatus === 'verified' || s.verificationStatus === 'approved') && s.status !== 'inactive'"), 'chargingDataService filters pending, rejected, and inactive stations from public driver feed');
 assert(chargingService.includes('addOrUpdateStation'), 'chargingDataService implements addOrUpdateStation memory synchronization');
 
 // 8. Check operationsService (Audit logging, review, deactivation, coordinate update)

@@ -125,7 +125,9 @@ export function normalizeStationData(rawStation: any): ChargingStation {
     amenities: rawStation.amenities || ['Café', 'Restroom', 'Wi-Fi', '24/7 Security'],
     voltScore: Number(rawStation.voltScore) || (latitude ? 92 : 88),
     status: rawStation.status || 'active',
-    verificationStatus: rawStation.verificationStatus || 'approved',
+    verificationStatus: rawStation.verificationStatus === 'verified' || rawStation.verificationStatus === 'approved'
+      ? 'verified'
+      : (rawStation.verificationStatus || 'verified'),
     dataSource: rawStation.dataSource || 'openchargemap',
     chargers,
     lastUpdated,
@@ -134,7 +136,7 @@ export function normalizeStationData(rawStation: any): ChargingStation {
     rejectionReason: rawStation.rejectionReason,
     reviewedBy: rawStation.reviewedBy,
     reviewedAt: rawStation.reviewedAt,
-    admin_verified: rawStation.admin_verified,
+    admin_verified: rawStation.admin_verified ?? (rawStation.verificationStatus === 'verified' || rawStation.verificationStatus === 'approved'),
   };
 }
 
@@ -142,6 +144,9 @@ class ChargingDataService {
   private cache: ChargingStation[] | null = null;
   private reports: StationReport[] = [];
   private currentSource: 'FIRESTORE' | 'LOCAL_FALLBACK' = 'LOCAL_FALLBACK';
+  private subscribers: Set<(stations: ChargingStation[]) => void> = new Set();
+  private isListeningToFirestore = false;
+  private unsubscribeFirestore: (() => void) | null = null;
 
   clearCache() {
     this.cache = null;
@@ -149,55 +154,118 @@ class ChargingDataService {
 
   /**
    * Directly updates or inserts a station into memory cache so that
-   * state changes (approval, rejection, soft-deletion, submission) are immediately reflected.
+   * state changes (approval, rejection, soft-deletion, submission) are immediately reflected
+   * and broadcast to all active subscribers.
    */
   addOrUpdateStation(station: ChargingStation) {
     if (!this.cache) {
       this.cache = [station];
-      return;
-    }
-    const idx = this.cache.findIndex(s => s.id === station.id);
-    if (idx >= 0) {
-      this.cache[idx] = { ...this.cache[idx], ...station };
     } else {
-      this.cache.unshift(station);
+      const idx = this.cache.findIndex(s => s.id === station.id);
+      if (idx >= 0) {
+        this.cache[idx] = { ...this.cache[idx], ...station };
+      } else {
+        this.cache.unshift(station);
+      }
     }
+    this.notifySubscribers();
+  }
+
+  private notifySubscribers() {
+    if (!this.cache) return;
+    const current = this.cache;
+    this.subscribers.forEach(cb => {
+      try {
+        cb(current);
+      } catch (err) {
+        console.warn('[ChargingDataService] Subscriber callback warning:', err);
+      }
+    });
+  }
+
+  /**
+   * Real-time subscription to charging stations.
+   * Emits immediately from cache/fetch and registers a Firestore onSnapshot listener.
+   */
+  subscribeToStations(callback: (stations: ChargingStation[]) => void): () => void {
+    this.subscribers.add(callback);
+
+    if (this.cache && this.cache.length > 0) {
+      callback(this.cache);
+    } else {
+      this.getAllStationsForAdmin().then(stations => callback(stations));
+    }
+
+    if (!this.isListeningToFirestore) {
+      this.isListeningToFirestore = true;
+      import('./firebase/stations').then(({ listenToFirestoreStations }) => {
+        this.unsubscribeFirestore = listenToFirestoreStations(firestoreStations => {
+          const baseMap = new Map<string, ChargingStation>();
+          INITIAL_CHARGING_STATIONS.forEach(s => {
+            const norm = normalizeStationData(s);
+            baseMap.set(norm.id, norm);
+          });
+          firestoreStations.forEach(s => {
+            baseMap.set(s.id, s);
+          });
+          const merged = Array.from(baseMap.values());
+          this.cache = merged;
+          this.currentSource = 'FIRESTORE';
+          this.notifySubscribers();
+        });
+      }).catch(err => {
+        console.warn('[ChargingDataService] Real-time listener init warning:', err);
+      });
+    }
+
+    return () => {
+      this.subscribers.delete(callback);
+    };
   }
 
   /**
    * Fetches approved charging stations for public driver use (VoltMap, Explore, Trip Planner).
-   * Strictly filters to verificationStatus === 'approved' and status !== 'inactive'.
+   * Strictly filters to verificationStatus === 'verified' | 'approved' and status !== 'inactive'.
    */
   async getStations(): Promise<ChargingStation[]> {
     const all = await this.getAllStationsForAdmin();
-    return all.filter(s => s.verificationStatus === 'approved' && s.status !== 'inactive');
+    return all.filter(s => (s.verificationStatus === 'verified' || s.verificationStatus === 'approved') && s.status !== 'inactive');
   }
 
   /**
-   * Fetches all charging stations including pending/rejected for Admin Command Center.
+   * Fetches all charging stations including pending/rejected for Admin Command Center and Partners.
+   * Unifies 1,766 base seed stations with Cloud Firestore records so no stations are lost.
    */
   async getAllStationsForAdmin(forceRefresh = false): Promise<ChargingStation[]> {
     if (!forceRefresh && this.cache && this.cache.length > 0) {
       return this.cache;
     }
 
+    const baseMap = new Map<string, ChargingStation>();
+    INITIAL_CHARGING_STATIONS.forEach(s => {
+      const norm = normalizeStationData(s);
+      baseMap.set(norm.id, norm);
+    });
+
     try {
       const firestoreDocs = await fetchFirestoreStations();
       if (firestoreDocs && firestoreDocs.length > 0) {
-        this.cache = firestoreDocs;
+        firestoreDocs.forEach(s => {
+          baseMap.set(s.id, s);
+        });
         this.currentSource = 'FIRESTORE';
-        console.info(`[VoltConnect] Charging dataset source: FIRESTORE (${firestoreDocs.length} stations).`);
-        return firestoreDocs;
+        console.info(`[VoltConnect] Unified station dataset: ${baseMap.size} stations (FIRESTORE + BASE SEED).`);
+      } else {
+        this.currentSource = 'LOCAL_FALLBACK';
       }
     } catch (err) {
       console.warn('[ChargingDataService] Firestore fetch fallback to seed:', err);
+      this.currentSource = 'LOCAL_FALLBACK';
     }
 
-    const fallbackNormalized = INITIAL_CHARGING_STATIONS.map(normalizeStationData);
-    this.cache = fallbackNormalized;
-    this.currentSource = 'LOCAL_FALLBACK';
-    console.info(`[VoltConnect] Charging dataset source: LOCAL_FALLBACK (${fallbackNormalized.length} seed stations).`);
-    return fallbackNormalized;
+    const merged = Array.from(baseMap.values());
+    this.cache = merged;
+    return merged;
   }
 
   /**
@@ -205,7 +273,7 @@ class ChargingDataService {
    */
   async getStationsByPartner(partnerUid: string): Promise<ChargingStation[]> {
     const all = await this.getAllStationsForAdmin();
-    return all.filter(s => s.createdBy === partnerUid);
+    return all.filter(s => s.createdBy === partnerUid || s.partnerId === partnerUid);
   }
 
   getDataSourceInfo(): { source: 'FIRESTORE' | 'LOCAL_FALLBACK'; count: number } {

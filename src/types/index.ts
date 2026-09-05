@@ -112,7 +112,7 @@ export interface Charger {
 }
 
 export type StationStatus = 'active' | 'maintenance' | 'offline' | 'inactive';
-export type VerificationStatus = 'approved' | 'pending' | 'rejected' | 'under_review';
+export type VerificationStatus = 'approved' | 'verified' | 'pending' | 'rejected' | 'under_review' | 'draft';
 export type PricingModel = 'per_kwh' | 'per_session' | 'time_based';
 export type ReachabilityStatus = 'WITHIN_RANGE' | 'NEAR_RANGE_LIMIT' | 'OUTSIDE_RANGE';
 
