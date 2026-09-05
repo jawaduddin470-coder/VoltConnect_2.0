@@ -8,8 +8,8 @@ export const AdminLogin: React.FC = () => {
   const { login, role } = useAuth();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('meraj@voltconnect.io');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('admin2.0@voltconnect.io');
+  const [password, setPassword] = useState('VoltAdmin2026!');
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState<{
     title: string;

@@ -64,7 +64,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Managed Users State
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([
-    { id: 'usr-1', name: 'Mohammed Meraj Uddin', email: 'meraj@voltconnect.io', role: 'admin', status: 'ACTIVE', vehiclesCount: 1, createdAt: '2026-08-01' },
+    { id: 'usr-1', name: 'VoltConnect Admin', email: 'admin2.0@voltconnect.io', role: 'admin', status: 'ACTIVE', vehiclesCount: 1, createdAt: '2026-08-01' },
     { id: 'usr-2', name: 'Alex Rivera', email: 'alex@voltcharge.com', role: 'partner', status: 'ACTIVE', vehiclesCount: 0, createdAt: '2026-08-05' },
     { id: 'usr-3', name: 'Ramesh Kumar', email: 'ramesh@voltcare.in', role: 'technician', status: 'ACTIVE', vehiclesCount: 0, createdAt: '2026-08-10' },
     { id: 'usr-4', name: 'Priya Sharma', email: 'priya@gmail.com', role: 'driver', status: 'ACTIVE', vehiclesCount: 2, createdAt: '2026-08-12' },

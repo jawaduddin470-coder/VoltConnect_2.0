@@ -69,8 +69,8 @@ export const AdminUsersView: React.FC = () => {
       const seedUsers: UserProfile[] = [
         {
           uid: 'usr-001',
-          name: 'Mohammed Meraj Uddin',
-          email: 'meraj@voltconnect.io',
+          name: 'VoltConnect Admin',
+          email: 'admin2.0@voltconnect.io',
           role: 'admin',
           activeVehicleId: 'mod-tata-nexon-ev',
           activeVehicleName: 'Tata Nexon EV Empowered+ Lux 45',

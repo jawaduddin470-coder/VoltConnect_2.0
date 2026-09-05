@@ -31,9 +31,9 @@ async function bootstrapAdmin() {
   console.log('================================================================\n');
 
   const args = process.argv.slice(2);
-  const email = (args[0] || process.env.ADMIN_BOOTSTRAP_EMAIL || 'meraj@voltconnect.io').trim();
-  const password = (args[1] || process.env.ADMIN_BOOTSTRAP_PASSWORD || 'password123').trim();
-  const name = (args[2] || 'Mohammed Meraj Uddin').trim();
+  const email = (args[0] || process.env.ADMIN_BOOTSTRAP_EMAIL || 'admin2.0@voltconnect.io').trim();
+  const password = (args[1] || process.env.ADMIN_BOOTSTRAP_PASSWORD || 'VoltAdmin2026!').trim();
+  const name = (args[2] || 'VoltConnect Admin').trim();
 
   if (!email || !password) {
     console.error('ERROR: Missing required email or password arguments.');
