@@ -7,6 +7,7 @@ import {
   TechnicianProfile,
   DataQualityIssue,
   UserRole,
+  VerificationStatus,
 } from '@/types';
 
 class OperationsService {
@@ -89,7 +90,10 @@ class OperationsService {
    * Submits a partner station for Admin approval review and persists to Firestore.
    */
   async submitStationForApproval(
-    station: Omit<ChargingStation, 'id' | 'verificationStatus' | 'lastUpdated'> & { id?: string }
+    station: Omit<ChargingStation, 'id' | 'verificationStatus' | 'lastUpdated'> & {
+      id?: string;
+      verificationStatus?: VerificationStatus;
+    }
   ): Promise<ChargingStation> {
     const stationId = station.id || `st-partner-${Date.now()}`;
     const pendingStation: ChargingStation = {
@@ -105,6 +109,13 @@ class OperationsService {
       await setDocument('stations', pendingStation.id, pendingStation);
     } catch (err) {
       console.warn('[OperationsService] Failed to persist pending station to Firestore:', err);
+    }
+
+    try {
+      const { chargingDataService } = await import('./chargingDataService');
+      chargingDataService.addOrUpdateStation(pendingStation);
+    } catch {
+      // safe fallback
     }
 
     return pendingStation;
@@ -156,6 +167,13 @@ class OperationsService {
       console.warn('[OperationsService] Failed to persist station review to Firestore:', err);
     }
 
+    try {
+      const { chargingDataService } = await import('./chargingDataService');
+      await chargingDataService.updateStation(stationId, updateData);
+    } catch {
+      // safe fallback
+    }
+
     this.logAuditEvent(
       reviewerId,
       reviewerEmail,
@@ -168,6 +186,92 @@ class OperationsService {
         rejectionReason: updateData.rejectionReason,
         stationName: st?.name,
       }
+    );
+
+    return true;
+  }
+
+  /**
+   * Soft-deactivates a station (status = 'inactive'), removing it from public VoltMap/Trip Planner.
+   */
+  async deactivateStation(
+    stationId: string,
+    adminId: string,
+    adminEmail: string,
+    reason?: string
+  ): Promise<boolean> {
+    const updateData: Partial<ChargingStation> = {
+      status: 'inactive',
+      lastUpdated: new Date().toISOString(),
+      updatedBy: adminEmail,
+    };
+
+    try {
+      const { updateDocumentFields } = await import('./firebase/firestore');
+      await updateDocumentFields('stations', stationId, updateData);
+    } catch (err) {
+      console.warn('[OperationsService] Failed to soft-deactivate station in Firestore:', err);
+    }
+
+    try {
+      const { chargingDataService } = await import('./chargingDataService');
+      await chargingDataService.updateStation(stationId, updateData);
+    } catch {
+      // safe fallback
+    }
+
+    this.logAuditEvent(
+      adminId,
+      adminEmail,
+      'admin',
+      'STATION_DEACTIVATED',
+      'stations',
+      stationId,
+      { reason: reason || 'Administrative soft-deletion' }
+    );
+
+    return true;
+  }
+
+  /**
+   * Updates geographical coordinates of a station with audit logging.
+   */
+  async updateStationCoordinates(
+    stationId: string,
+    latitude: number,
+    longitude: number,
+    adminId: string,
+    adminEmail: string
+  ): Promise<boolean> {
+    const updateData: Partial<ChargingStation> = {
+      latitude,
+      longitude,
+      lastUpdated: new Date().toISOString(),
+      updatedBy: adminEmail,
+    };
+
+    try {
+      const { updateDocumentFields } = await import('./firebase/firestore');
+      await updateDocumentFields('stations', stationId, updateData);
+    } catch (err) {
+      console.warn('[OperationsService] Failed to update station coordinates in Firestore:', err);
+    }
+
+    try {
+      const { chargingDataService } = await import('./chargingDataService');
+      await chargingDataService.updateStation(stationId, updateData);
+    } catch {
+      // safe fallback
+    }
+
+    this.logAuditEvent(
+      adminId,
+      adminEmail,
+      'admin',
+      'STATION_COORDINATES_UPDATED',
+      'stations',
+      stationId,
+      { latitude, longitude }
     );
 
     return true;

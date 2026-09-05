@@ -148,19 +148,36 @@ class ChargingDataService {
   }
 
   /**
+   * Directly updates or inserts a station into memory cache so that
+   * state changes (approval, rejection, soft-deletion, submission) are immediately reflected.
+   */
+  addOrUpdateStation(station: ChargingStation) {
+    if (!this.cache) {
+      this.cache = [station];
+      return;
+    }
+    const idx = this.cache.findIndex(s => s.id === station.id);
+    if (idx >= 0) {
+      this.cache[idx] = { ...this.cache[idx], ...station };
+    } else {
+      this.cache.unshift(station);
+    }
+  }
+
+  /**
    * Fetches approved charging stations for public driver use (VoltMap, Explore, Trip Planner).
-   * Strictly filters to verificationStatus === 'approved'.
+   * Strictly filters to verificationStatus === 'approved' and status !== 'inactive'.
    */
   async getStations(): Promise<ChargingStation[]> {
     const all = await this.getAllStationsForAdmin();
-    return all.filter(s => s.verificationStatus === 'approved');
+    return all.filter(s => s.verificationStatus === 'approved' && s.status !== 'inactive');
   }
 
   /**
    * Fetches all charging stations including pending/rejected for Admin Command Center.
    */
-  async getAllStationsForAdmin(): Promise<ChargingStation[]> {
-    if (this.cache && this.cache.length > 0) {
+  async getAllStationsForAdmin(forceRefresh = false): Promise<ChargingStation[]> {
+    if (!forceRefresh && this.cache && this.cache.length > 0) {
       return this.cache;
     }
 

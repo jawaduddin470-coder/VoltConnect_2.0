@@ -340,6 +340,94 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/stations"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/vehicles"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/partners"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/operations"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/service"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/analytics"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/system-health"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/health"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/audit"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/settings"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Wildcard Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

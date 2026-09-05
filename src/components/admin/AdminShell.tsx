@@ -53,13 +53,14 @@ export const AdminShell: React.FC<AdminShellProps> = ({ children }) => {
     { path: '/admin/operations', label: 'Operations', icon: Sliders },
     { path: '/admin/service', label: 'Service & Maintenance', icon: Wrench },
     { path: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
-    { path: '/admin/health', label: 'System Health', icon: Activity },
+    { path: '/admin/system-health', label: 'System Health', icon: Activity },
     { path: '/admin/audit', label: 'Audit Logs', icon: FileText },
     { path: '/admin/settings', label: 'Settings', icon: Settings },
   ];
 
   // Helper to determine breadcrumb label
   const getCurrentBreadcrumb = () => {
+    if (location.pathname === '/admin/health' || location.pathname.startsWith('/admin/system-health')) return 'System Health';
     const current = sidebarLinks.find(l => location.pathname === l.path || (l.path !== '/admin/dashboard' && location.pathname.startsWith(l.path)));
     return current ? current.label : 'Overview';
   };
@@ -216,7 +217,10 @@ export const AdminShell: React.FC<AdminShellProps> = ({ children }) => {
 
               {sidebarLinks.map(link => {
                 const Icon = link.icon;
-                const active = location.pathname === link.path || (link.path !== '/admin/dashboard' && location.pathname.startsWith(link.path));
+                const active =
+                  location.pathname === link.path ||
+                  (link.path !== '/admin/dashboard' && location.pathname.startsWith(link.path)) ||
+                  (link.path === '/admin/system-health' && location.pathname === '/admin/health');
 
                 return (
                   <Link

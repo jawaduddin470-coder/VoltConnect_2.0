@@ -24,12 +24,16 @@ import {
   Info,
   DollarSign,
   Compass,
+  List,
+  Map as MapIcon,
 } from 'lucide-react';
+import { AdminNetworkMap } from './AdminNetworkMap';
 
 export const AdminStationsView: React.FC = () => {
   const { user } = useAuth();
   const [stations, setStations] = useState<ChargingStation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [displayMode, setDisplayMode] = useState<'TABLE' | 'MAP'>('TABLE');
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -273,9 +277,32 @@ export const AdminStationsView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-bold text-slate-400 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 shrink-0">
-          <Zap className="w-4 h-4 text-sky-400" />
-          <span>{filteredStations.length} of {stations.length} Hubs Loaded</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800">
+            <button
+              onClick={() => setDisplayMode('TABLE')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                displayMode === 'TABLE' ? 'bg-sky-500 text-white shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>Table View</span>
+            </button>
+            <button
+              onClick={() => setDisplayMode('MAP')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                displayMode === 'MAP' ? 'bg-sky-500 text-white shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <MapIcon className="w-3.5 h-3.5" />
+              <span>Network Map</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 shrink-0">
+            <Zap className="w-4 h-4 text-sky-400" />
+            <span>{filteredStations.length} of {stations.length} Hubs Loaded</span>
+          </div>
         </div>
       </div>
 
@@ -328,8 +355,17 @@ export const AdminStationsView: React.FC = () => {
         </button>
       </div>
 
-      {/* 2. SEARCH & MULTI-FILTER TOOLBAR */}
-      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 shadow-sm">
+      {displayMode === 'MAP' ? (
+        <AdminNetworkMap
+          stations={stations}
+          onStationUpdated={updated => {
+            setStations(prev => prev.map(s => (s.id === updated.id ? updated : s)));
+          }}
+        />
+      ) : (
+        <>
+          {/* 2. SEARCH & MULTI-FILTER TOOLBAR */}
+          <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 shadow-sm">
         
         {/* Search Bar */}
         <div className="relative w-full">
@@ -623,6 +659,8 @@ export const AdminStationsView: React.FC = () => {
         </div>
 
       </div>
+        </>
+      )}
 
       {/* 4. STATION DETAIL & EDIT MODAL */}
       {selectedStation && (

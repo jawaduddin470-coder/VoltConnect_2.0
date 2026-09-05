@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminShell } from '@/components/admin/AdminShell';
 import { AdminOverviewView } from '@/components/admin/AdminOverviewView';
@@ -9,6 +9,10 @@ import { AdminUsersView } from '@/components/admin/AdminUsersView';
 import { AdminPartnersView } from '@/components/admin/AdminPartnersView';
 import { AdminOperationsView } from '@/components/admin/AdminOperationsView';
 import { AdminAuditLogsView } from '@/components/admin/AdminAuditLogsView';
+import { AdminServiceView } from '@/components/admin/AdminServiceView';
+import { AdminAnalyticsView } from '@/components/admin/AdminAnalyticsView';
+import { AdminSystemHealthView } from '@/components/admin/AdminSystemHealthView';
+import { AdminSettingsView } from '@/components/admin/AdminSettingsView';
 import { operationsService } from '@/services/operationsService';
 import { chargingDataService } from '@/services/chargingDataService';
 import { AuditLog, ChargingStation, PartnerApplication, DataQualityIssue, StationReport, UserRole } from '@/types';
@@ -52,7 +56,8 @@ interface ManagedUser {
 
 export const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'stations' | 'partners' | 'operations' | 'audit'>('overview');
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Real Operational Data State
   const [stations, setStations] = useState<ChargingStation[]>([]);
@@ -118,9 +123,25 @@ export const AdminDashboard: React.FC = () => {
     setEditingUser(null);
   };
 
-  const filteredUsers = managedUsers.filter(
-    u => u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase())
-  );
+  const isOverview = location.pathname === '/admin/dashboard' || location.pathname === '/admin';
+  const isUsers = location.pathname.startsWith('/admin/users');
+  const isStations = location.pathname.startsWith('/admin/stations');
+  const isAudit = location.pathname.startsWith('/admin/audit');
+
+  const renderCurrentView = () => {
+    const path = location.pathname;
+    if (path.startsWith('/admin/users')) return <AdminUsersView />;
+    if (path.startsWith('/admin/stations')) return <AdminStationsView />;
+    if (path.startsWith('/admin/vehicles')) return <AdminVehiclesView />;
+    if (path.startsWith('/admin/partners')) return <AdminPartnersView />;
+    if (path.startsWith('/admin/operations')) return <AdminOperationsView />;
+    if (path.startsWith('/admin/service')) return <AdminServiceView />;
+    if (path.startsWith('/admin/analytics')) return <AdminAnalyticsView />;
+    if (path.startsWith('/admin/system-health') || path.startsWith('/admin/health')) return <AdminSystemHealthView />;
+    if (path.startsWith('/admin/audit')) return <AdminAuditLogsView />;
+    if (path.startsWith('/admin/settings')) return <AdminSettingsView />;
+    return <AdminOverviewView />;
+  };
 
   return (
     <AdminShell>
@@ -143,33 +164,33 @@ export const AdminDashboard: React.FC = () => {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setActiveTab('overview')}
+              onClick={() => navigate('/admin/dashboard')}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'overview' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                isOverview ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
               Overview
             </button>
             <button
-              onClick={() => setActiveTab('users')}
+              onClick={() => navigate('/admin/users')}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'users' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                isUsers ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
               Users ({managedUsers.length})
             </button>
             <button
-              onClick={() => setActiveTab('stations')}
+              onClick={() => navigate('/admin/stations')}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'stations' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                isStations ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
               Pending ({pendingStations.length})
             </button>
             <button
-              onClick={() => setActiveTab('audit')}
+              onClick={() => navigate('/admin/audit')}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'audit' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                isAudit ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
               Audit Stream
@@ -177,34 +198,8 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* 2. MAIN TAB CONTENT PANELS */}
-        {(activeTab === 'overview' && !location.pathname.includes('/stations') && !location.pathname.includes('/vehicles') && !location.pathname.includes('/users') && !location.pathname.includes('/partners') && !location.pathname.includes('/operations') && !location.pathname.includes('/audit')) && (
-          <AdminOverviewView />
-        )}
-
-        {(activeTab === 'stations' || location.pathname.includes('/stations')) && (
-          <AdminStationsView />
-        )}
-
-        {location.pathname.includes('/vehicles') && (
-          <AdminVehiclesView />
-        )}
-
-        {(activeTab === 'users' || location.pathname.includes('/users')) && (
-          <AdminUsersView />
-        )}
-
-        {(activeTab === 'partners' || location.pathname.includes('/partners')) && (
-          <AdminPartnersView />
-        )}
-
-        {(activeTab === 'operations' || location.pathname.includes('/operations')) && (
-          <AdminOperationsView />
-        )}
-
-        {(activeTab === 'audit' || location.pathname.includes('/audit')) && (
-          <AdminAuditLogsView />
-        )}
+        {/* 2. MAIN SUBROUTE VIEW */}
+        {renderCurrentView()}
 
         {/* Edit Role Modal */}
         {editingUser && (

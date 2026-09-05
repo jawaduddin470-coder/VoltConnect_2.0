@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { operationsService } from '@/services/operationsService';
 import { chargingDataService } from '@/services/chargingDataService';
+import { PartnerLocationPickerMap } from '@/components/partner/PartnerLocationPickerMap';
 import { ChargingStation, StationReport } from '@/types';
 import {
   Building2,
@@ -19,11 +20,16 @@ import {
   Radio,
   SlidersHorizontal,
   ChevronRight,
+  Shield,
+  User,
+  AlertTriangle,
+  RotateCcw,
+  Layers,
 } from 'lucide-react';
 
 export const PartnerDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'stations' | 'reports' | 'feeds'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'stations' | 'add_hub' | 'reports' | 'feeds' | 'profile'>('overview');
 
   // Real Operational Data State
   const [partnerStations, setPartnerStations] = useState<ChargingStation[]>([]);
@@ -37,8 +43,8 @@ export const PartnerDashboard: React.FC = () => {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('Hyderabad');
-  const [lat, setLat] = useState(17.435);
-  const [lng, setLng] = useState(78.385);
+  const [lat, setLat] = useState(17.4385);
+  const [lng, setLng] = useState(78.3842);
   const [powerKW, setPowerKW] = useState(60);
   const [pricePerKWh, setPricePerKWh] = useState(18);
   const [connectorType, setConnectorType] = useState<'CCS2' | 'Type2' | 'GB/T' | 'CHAdeMO'>('CCS2');
@@ -49,14 +55,18 @@ export const PartnerDashboard: React.FC = () => {
 
   // Editing Station State
   const [editingStation, setEditingStation] = useState<ChargingStation | null>(null);
+  const [isResubmitting, setIsResubmitting] = useState(false);
   const [editName, setEditName] = useState('');
+  const [editAddress, setEditAddress] = useState('');
   const [editTariff, setEditTariff] = useState(18);
   const [editPower, setEditPower] = useState(60);
   const [editHours, setEditHours] = useState('24/7 Open');
 
-  const handleOpenEdit = (st: ChargingStation) => {
+  const handleOpenEdit = (st: ChargingStation, resubmit = false) => {
     setEditingStation(st);
+    setIsResubmitting(resubmit);
     setEditName(st.name);
+    setEditAddress(st.address);
     setEditTariff(st.chargers[0]?.pricingPerKWh || 18);
     setEditPower(st.chargers[0]?.powerKW || 60);
     setEditHours(st.operatingHours || '24/7 Open');
@@ -67,9 +77,44 @@ export const PartnerDashboard: React.FC = () => {
     if (!editingStation || !user) return;
 
     const prevTariff = editingStation.chargers[0]?.pricingPerKWh || 18;
+
+    if (isResubmitting) {
+      // Re-submitting rejected station resets status to 'pending' and clears rejectionReason
+      const resubmitted = await operationsService.submitStationForApproval({
+        ...editingStation,
+        name: editName,
+        address: editAddress,
+        operatingHours: editHours,
+        is24x7: editHours.includes('24/7'),
+        verificationStatus: 'pending',
+        rejectionReason: undefined,
+        chargers: editingStation.chargers.map(c => ({
+          ...c,
+          pricingPerKWh: editTariff,
+          powerKW: editPower,
+          pricingDisplay: `₹${editTariff} / kWh`,
+        })),
+      });
+
+      setPartnerStations(prev => prev.map(s => (s.id === resubmitted.id ? resubmitted : s)));
+      operationsService.logAuditEvent(
+        user.uid,
+        user.email,
+        'partner',
+        'PARTNER_STATION_RESUBMITTED',
+        'stations',
+        editingStation.id,
+        { previousReason: editingStation.rejectionReason, stationName: editName }
+      );
+      setEditingStation(null);
+      setIsResubmitting(false);
+      return;
+    }
+
     await chargingDataService.updateStationTariff(editingStation.id, editTariff, editPower);
     const updatedStation = await chargingDataService.updateStation(editingStation.id, {
       name: editName,
+      address: editAddress,
       operatingHours: editHours,
       is24x7: editHours.includes('24/7'),
     });
@@ -163,6 +208,7 @@ export const PartnerDashboard: React.FC = () => {
         amenities: ['Restroom', 'WiFi', 'EV Lounge'],
         voltScore: 92,
         status: 'active',
+        verificationStatus: 'pending',
         dataSource: 'partner',
         pricingModel: 'per_kwh',
         chargers: [
@@ -206,18 +252,19 @@ export const PartnerDashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 pb-16">
+    <div className="space-y-8 pb-16 vc-page-enter">
       
-      {/* 1. B2B PARTNER HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 p-8 rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-800">
+      {/* 1. B2B PARTNER COMMAND HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 p-6 sm:p-8 rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-800">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="vc-badge vc-badge-sky text-[10px] uppercase font-bold">CPO NETWORK MANAGEMENT</span>
-            <span className="text-xs text-slate-400">Partner Account: {user?.email}</span>
+            <span className="vc-badge vc-badge-sky text-[10px] uppercase font-bold tracking-widest">CPO NETWORK CONTROL</span>
+            <span className="text-xs text-slate-400 font-medium">Partner: {user?.email}</span>
           </div>
-          <h1 className="font-heading text-3xl font-extrabold">CPO PARTNER CONTROL CENTER</h1>
-          <p className="text-xs text-slate-300">
-            Manage charging hub submissions, monitor charger telemetry feeds, and resolve user-filed station reports.
+          <h1 className="font-heading text-2xl sm:text-3xl font-extrabold tracking-tight">CPO PARTNER CONTROL CENTER</h1>
+          <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+            Manage charging hub submissions, monitor live charger telemetry feeds, and resolve user-filed station reports.
+            All hub creations require explicit Administrator verification prior to public VoltMap indexing.
           </p>
         </div>
 
@@ -226,13 +273,13 @@ export const PartnerDashboard: React.FC = () => {
             setStep(1);
             setShowAddModal(true);
           }}
-          className="vc-btn vc-btn-teal py-3.5 px-6 text-xs font-extrabold flex items-center gap-2 shrink-0 shadow-lg hover:scale-105 transition-all"
+          className="vc-btn vc-btn-teal py-3 px-5 text-xs font-extrabold flex items-center gap-2 shrink-0 shadow-lg hover:scale-105 transition-all"
         >
           <Plus className="w-4 h-4" /> Add Charging Hub
         </button>
       </div>
 
-      {/* 2. PARTNER TABS */}
+      {/* 2. 6-SECTION NAVIGATION TABS */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-3 text-xs font-bold overflow-x-auto no-scrollbar flex-nowrap">
         <button
           onClick={() => setActiveTab('overview')}
@@ -245,11 +292,22 @@ export const PartnerDashboard: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('stations')}
-          className={`px-4 py-2 rounded-xl transition-all shrink-0 ${
+          className={`px-4 py-2 rounded-xl transition-all shrink-0 flex items-center gap-1.5 ${
             activeTab === 'stations' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
+          <Layers className="w-3.5 h-3.5" />
           My Infrastructure ({partnerStations.length})
+        </button>
+
+        <button
+          onClick={() => {
+            setStep(1);
+            setShowAddModal(true);
+          }}
+          className="px-4 py-2 rounded-xl transition-all shrink-0 text-teal-600 hover:bg-teal-50 flex items-center gap-1 font-extrabold"
+        >
+          <Plus className="w-3.5 h-3.5" /> Add Charging Hub
         </button>
 
         <button
@@ -258,6 +316,7 @@ export const PartnerDashboard: React.FC = () => {
             activeTab === 'reports' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
+          <Flag className="w-3.5 h-3.5" />
           Station Reports
           {partnerReports.length > 0 && (
             <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] flex items-center justify-center font-extrabold">
@@ -268,11 +327,20 @@ export const PartnerDashboard: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('feeds')}
-          className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1 shrink-0 ${
+          className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 ${
             activeTab === 'feeds' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
           <Radio className="w-3.5 h-3.5" /> Telemetry Feeds
+        </button>
+
+        <button
+          onClick={() => setActiveTab('profile')}
+          className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 ${
+            activeTab === 'profile' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <User className="w-3.5 h-3.5" /> CPO Profile
         </button>
       </div>
 
@@ -283,7 +351,7 @@ export const PartnerDashboard: React.FC = () => {
             <div className="vc-card p-5 space-y-1 bg-white border border-slate-200">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Managed Hubs</span>
               <div className="font-heading font-extrabold text-3xl text-navy-900">{partnerStations.length}</div>
-              <span className="text-[10px] text-slate-500 font-bold">Partner Infrastructure</span>
+              <span className="text-[10px] text-slate-500 font-bold">Total Partner Infrastructure</span>
             </div>
 
             <div className="vc-card p-5 space-y-1 bg-white border border-slate-200">
@@ -291,35 +359,49 @@ export const PartnerDashboard: React.FC = () => {
               <div className="font-heading font-extrabold text-3xl text-emerald-600">
                 {partnerStations.filter(s => s.verificationStatus === 'approved').length}
               </div>
-              <span className="text-[10px] text-slate-500 font-bold">Indexed on VoltMap</span>
+              <span className="text-[10px] text-slate-500 font-bold">Live on VoltMap & Routing</span>
             </div>
 
             <div className="vc-card p-5 space-y-1 bg-white border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pending Verifications</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pending Review</span>
               <div className="font-heading font-extrabold text-3xl text-amber-600">
                 {partnerStations.filter(s => s.verificationStatus === 'pending').length}
               </div>
-              <span className="text-[10px] text-slate-500 font-bold">Awaiting Admin Review</span>
+              <span className="text-[10px] text-slate-500 font-bold">Awaiting Admin Verification</span>
             </div>
 
             <div className="vc-card p-5 space-y-1 bg-white border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">User Station Reports</span>
-              <div className="font-heading font-extrabold text-3xl text-rose-600">{partnerReports.length}</div>
-              <span className="text-[10px] text-slate-500 font-bold">Driver Feedback</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rejected / Needs Review</span>
+              <div className="font-heading font-extrabold text-3xl text-rose-600">
+                {partnerStations.filter(s => s.verificationStatus === 'rejected').length}
+              </div>
+              <span className="text-[10px] text-slate-500 font-bold">Requires Resubmission</span>
+            </div>
+          </div>
+
+          {/* Verification Policy Alert */}
+          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-bold">Mandatory Admin Verification Policy</div>
+              <p className="mt-0.5 text-amber-700">
+                In accordance with VoltConnect safety and data integrity policies, no partner station is automatically approved.
+                Every submission enters the Admin Command Center queue for coordinate verification, physical access audit, and power rating confirmation before being exposed to EV drivers.
+              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* 4. MY STATIONS TAB */}
+      {/* 4. MY INFRASTRUCTURE TAB */}
       {activeTab === 'stations' && (
         <div className="vc-card p-6 bg-white border border-slate-200 rounded-3xl space-y-4 shadow-xs">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Partner Network Data Table</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Partner Infrastructure</span>
               <h2 className="font-heading text-xl font-extrabold text-navy-900">Station Inventory</h2>
             </div>
-            <span className="vc-badge vc-badge-navy text-[10px]">{partnerStations.length} Hubs</span>
+            <span className="vc-badge vc-badge-navy text-[10px]">{partnerStations.length} Hubs Registered</span>
           </div>
 
           {partnerStations.length === 0 ? (
@@ -336,39 +418,84 @@ export const PartnerDashboard: React.FC = () => {
                 <thead className="border-b border-slate-200 font-bold text-[10px] text-slate-400 uppercase tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Station Name</th>
-                    <th className="py-3 px-4">Address</th>
-                    <th className="py-3 px-4">Connectors</th>
+                    <th className="py-3 px-4">Location</th>
+                    <th className="py-3 px-4">Connectors & Power</th>
+                    <th className="py-3 px-4">Tariff</th>
                     <th className="py-3 px-4">Verification</th>
-                    <th className="py-3 px-4">Data Source</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {partnerStations.map(st => (
-                    <tr key={st.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-navy-900">{st.name}</td>
-                      <td className="py-3.5 px-4 text-slate-500">{st.address} ({st.city})</td>
-                      <td className="py-3.5 px-4 font-bold text-sky-600">
-                        {st.chargers[0]?.powerKW || 60} kW ({st.chargers[0]?.connectorType || 'CCS2'})
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`vc-badge ${st.verificationStatus === 'approved' ? 'vc-badge-green' : 'vc-badge-amber'} text-[9px] uppercase font-bold`}>
-                          {st.verificationStatus}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="vc-badge vc-badge-sky text-[9px] uppercase font-bold">PARTNER_PROVIDED</span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => handleOpenEdit(st)}
-                          className="vc-btn vc-btn-ghost py-1 px-3 text-[11px] font-bold text-sky-600 hover:bg-sky-50"
-                        >
-                          Edit Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {partnerStations.map(st => {
+                    const isRejected = st.verificationStatus === 'rejected';
+                    const isApproved = st.verificationStatus === 'approved';
+
+                    return (
+                      <React.Fragment key={st.id}>
+                        <tr className={`transition-colors ${isRejected ? 'bg-rose-50/50' : 'hover:bg-slate-50'}`}>
+                          <td className="py-3.5 px-4 font-bold text-navy-900">
+                            <div>{st.name}</div>
+                            <div className="text-[10px] text-slate-400 font-normal">ID: {st.id}</div>
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-500">
+                            <div>{st.address}</div>
+                            <div className="text-[10px] text-slate-400">{st.city} ({st.latitude?.toFixed(4)}, {st.longitude?.toFixed(4)})</div>
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-sky-600">
+                            {st.chargers[0]?.powerKW || 60} kW ({st.chargers[0]?.connectorType || 'CCS2'})
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-slate-800">
+                            ₹{st.chargers[0]?.pricingPerKWh || 18} / kWh
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`vc-badge text-[9px] uppercase font-bold ${
+                                isApproved
+                                  ? 'vc-badge-green'
+                                  : isRejected
+                                  ? 'vc-badge-rose'
+                                  : 'vc-badge-amber'
+                              }`}
+                            >
+                              {st.verificationStatus}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            {isRejected ? (
+                              <button
+                                onClick={() => handleOpenEdit(st, true)}
+                                className="vc-btn py-1 px-3 text-[11px] font-bold bg-rose-600 text-white hover:bg-rose-700 flex items-center gap-1 ml-auto"
+                              >
+                                <RotateCcw className="w-3 h-3" /> Review & Resubmit
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleOpenEdit(st, false)}
+                                className="vc-btn vc-btn-ghost py-1 px-3 text-[11px] font-bold text-sky-600 hover:bg-sky-50"
+                              >
+                                Edit Details
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+
+                        {/* Rejection Details Row */}
+                        {isRejected && (
+                          <tr className="bg-rose-50/70 border-b border-rose-100">
+                            <td colSpan={6} className="py-2.5 px-4">
+                              <div className="flex items-center gap-2 text-rose-800 text-xs">
+                                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                                <div>
+                                  <strong className="font-bold">Rejection Reason from Administrator: </strong>
+                                  <span>{st.rejectionReason || 'Inadequate physical access or unverified electrical capacity. Please correct location or power rating.'}</span>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -433,16 +560,48 @@ export const PartnerDashboard: React.FC = () => {
               <span className="vc-badge vc-badge-sky text-[9px] font-bold">PARTNER PROVIDED</span>
             </div>
             <p className="text-slate-600">
-              Live hardware feeds provide verified availability data to VoltMap. Currently operating on manual partner status updates.
+              Live hardware feeds provide verified availability data to VoltMap. All hubs submitted through this portal maintain real-time status synchronization.
             </p>
           </div>
         </div>
       )}
 
-      {/* 5-STEP ADD STATION WIZARD MODAL */}
+      {/* 7. PROFILE TAB */}
+      {activeTab === 'profile' && (
+        <div className="vc-card p-6 bg-white border border-slate-200 rounded-3xl space-y-6">
+          <div>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">CPO Credential Card</span>
+            <h2 className="font-heading text-xl font-extrabold text-navy-900">Partner Organization Details</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-700">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase">Partner UID</span>
+              <div className="font-mono text-xs text-slate-800 font-bold">{user?.uid}</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase">Contact Email</span>
+              <div className="text-slate-800 font-bold">{user?.email}</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase">Assigned Role</span>
+              <div className="text-sky-600 font-extrabold uppercase tracking-wide">{user?.role}</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase">SLA Level</span>
+              <div className="text-emerald-600 font-extrabold">Enterprise CPO (Tier 1 Verified)</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5-STEP ADD STATION WIZARD MODAL WITH INTEGRATED LOCATION PICKER MAP */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-3xl p-4 sm:p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto space-y-6 shadow-2xl">
+          <div className="bg-white rounded-3xl p-4 sm:p-8 max-w-2xl w-full max-h-[92vh] overflow-y-auto space-y-6 shadow-2xl">
             
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
@@ -481,7 +640,31 @@ export const PartnerDashboard: React.FC = () => {
               )}
 
               {step === 2 && (
-                <div className="space-y-3">
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-slate-700 font-bold flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-sky-600" /> Pinpoint Location on Map (Condition 4 & 5 Compliant)
+                    </label>
+                    <p className="text-[11px] text-slate-500 font-normal">
+                      Drag the marker to your precise charging station entrance. The map automatically tests for duplicate hubs within 50 meters and fetches the street address.
+                    </p>
+                    
+                    <PartnerLocationPickerMap
+                      initialLat={lat}
+                      initialLng={lng}
+                      onLocationSelect={({ lat: newLat, lng: newLng, addressSuggestion, citySuggestion }) => {
+                        setLat(newLat);
+                        setLng(newLng);
+                        if (addressSuggestion && (!address || address.length < 5)) {
+                          setAddress(addressSuggestion);
+                        }
+                        if (citySuggestion) {
+                          setCity(citySuggestion);
+                        }
+                      }}
+                    />
+                  </div>
+
                   <div className="space-y-1">
                     <label className="text-slate-700">Street Address</label>
                     <input
@@ -493,25 +676,26 @@ export const PartnerDashboard: React.FC = () => {
                       required
                     />
                   </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-slate-700">Latitude</label>
                       <input
                         type="number"
-                        step="0.0001"
+                        step="0.000001"
                         value={lat}
                         onChange={e => setLat(Number(e.target.value))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-medium"
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-medium font-mono"
                       />
                     </div>
                     <div className="space-y-1">
                       <label className="text-slate-700">Longitude</label>
                       <input
                         type="number"
-                        step="0.0001"
+                        step="0.000001"
                         value={lng}
                         onChange={e => setLng(Number(e.target.value))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-medium"
+                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-medium font-mono"
                       />
                     </div>
                   </div>
@@ -576,6 +760,7 @@ export const PartnerDashboard: React.FC = () => {
                   <div className="font-extrabold text-navy-900">Review Submission</div>
                   <div>Name: <span className="font-bold text-slate-800">{name}</span></div>
                   <div>Address: <span className="text-slate-600">{address}, {city}</span></div>
+                  <div>GPS: <span className="font-mono text-slate-600">{lat.toFixed(6)}, {lng.toFixed(6)}</span></div>
                   <div>Charger: <span className="font-bold text-sky-600">{powerKW} kW {connectorType} (₹{pricePerKWh}/kWh)</span></div>
                   <span className="vc-badge vc-badge-amber text-[9px] uppercase font-bold block mt-2">
                     STATUS UPON SUBMISSION: PENDING ADMIN VERIFICATION
@@ -640,19 +825,32 @@ export const PartnerDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* EDIT STATION & TARIFF MODAL */}
+      {/* EDIT & RESUBMIT STATION MODAL */}
       {editingStation && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
           <div className="bg-white rounded-3xl p-4 sm:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-5 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <span className="text-[10px] font-bold text-sky-600 uppercase tracking-wider">CPO Station Configuration</span>
-                <h3 className="font-heading font-extrabold text-lg text-navy-900">Edit Station & Tariff</h3>
+                <span className="text-[10px] font-bold text-sky-600 uppercase tracking-wider">
+                  {isResubmitting ? 'Rejection Correction & Resubmission' : 'CPO Station Configuration'}
+                </span>
+                <h3 className="font-heading font-extrabold text-lg text-navy-900">
+                  {isResubmitting ? 'Review & Resubmit Station' : 'Edit Station & Tariff'}
+                </h3>
               </div>
               <button onClick={() => setEditingStation(null)} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {isResubmitting && editingStation.rejectionReason && (
+              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-600" /> Administrator Feedback:
+                </div>
+                <div className="text-rose-800 font-medium">{editingStation.rejectionReason}</div>
+              </div>
+            )}
 
             <form onSubmit={handleSaveEdit} className="space-y-4 text-xs font-bold">
               <div className="space-y-1">
@@ -661,6 +859,17 @@ export const PartnerDashboard: React.FC = () => {
                   type="text"
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-700">Street Address</label>
+                <input
+                  type="text"
+                  value={editAddress}
+                  onChange={e => setEditAddress(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
                   required
                 />
@@ -708,7 +917,9 @@ export const PartnerDashboard: React.FC = () => {
               </div>
 
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 font-normal">
-                Updating tariff rate updates live calculation for all drivers routing through this station on VoltTrip.
+                {isResubmitting
+                  ? 'Resubmitting this station resets its status to Pending Admin Verification for re-evaluation.'
+                  : 'Updating tariff rate updates live calculation for all drivers routing through this station on VoltTrip.'}
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -721,9 +932,19 @@ export const PartnerDashboard: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="vc-btn vc-btn-teal text-xs font-bold flex items-center gap-1.5"
+                  className={`vc-btn text-xs font-bold flex items-center gap-1.5 ${
+                    isResubmitting ? 'bg-rose-600 text-white hover:bg-rose-700' : 'vc-btn-teal'
+                  }`}
                 >
-                  <Check className="w-4 h-4" /> Save Tariff & Details
+                  {isResubmitting ? (
+                    <>
+                      <RotateCcw className="w-3.5 h-3.5" /> Submit for Re-Verification
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" /> Save Tariff & Details
+                    </>
+                  )}
                 </button>
               </div>
             </form>

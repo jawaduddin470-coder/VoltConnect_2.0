@@ -111,7 +111,7 @@ export interface Charger {
   lastUpdated: string;
 }
 
-export type StationStatus = 'active' | 'maintenance' | 'offline';
+export type StationStatus = 'active' | 'maintenance' | 'offline' | 'inactive';
 export type VerificationStatus = 'approved' | 'pending' | 'rejected' | 'under_review';
 export type PricingModel = 'per_kwh' | 'per_session' | 'time_based';
 export type ReachabilityStatus = 'WITHIN_RANGE' | 'NEAR_RANGE_LIMIT' | 'OUTSIDE_RANGE';
@@ -363,7 +363,11 @@ export type ServiceRequestStatus =
   | 'IN_PROGRESS'
   | 'COMPLETED'
   | 'CANCELLED'
-  | 'REJECTED';
+  | 'REJECTED'
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
 
 export type ServicePriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT' | 'low' | 'medium' | 'high' | 'urgent';
 
@@ -380,6 +384,9 @@ export type ServiceCategory =
   | 'battery_diagnostics'
   | 'charger_installation'
   | 'general_maintenance'
+  | 'emergency'
+  | 'routine'
+  | 'repair'
   | 'other';
 
 export interface ServiceQuote {
@@ -397,20 +404,25 @@ export interface ServiceQuote {
 export interface ServiceRequest {
   id: string;
   userId: string;
-  vehicleId: string;
+  userEmail?: string;
+  vehicleId?: string;
+  stationId?: string;
+  serviceType?: string;
   category: ServiceCategory;
   description: string;
+  notes?: string;
   attachmentUrls?: string[];
   preferredLocationType: 'home_service' | 'workshop_visit';
   preferredDate?: string;
   preferredTime?: string;
-  priority: ServicePriority;
+  priority?: ServicePriority;
   status: ServiceRequestStatus;
   assignedTechnicianId?: string;
   assignedPartnerId?: string;
+  adminNotes?: string;
   quote?: ServiceQuote;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
   completedAt?: string;
 }
 
