@@ -24,7 +24,11 @@ export function getAuthErrorMessage(error: any): string {
   const code = error?.code || '';
   const message = error?.message || '';
 
-  if (code === 'auth/unauthorized-domain' || message.includes('Illegal url for new iframe')) {
+  if (message.includes('Illegal url for new iframe')) {
+    return 'Google Cloud API Key Restriction: The authentication iframe was blocked because "https://voltconnect-30c9b.firebaseapp.com/*" is not allowed in your Google Cloud API Key HTTP referrers. In Google Cloud Console -> APIs & Services -> Credentials, edit your API key and set Application restrictions to "None" (recommended by Firebase) or add "https://voltconnect-30c9b.firebaseapp.com/*".';
+  }
+
+  if (code === 'auth/unauthorized-domain') {
     const domain = typeof window !== 'undefined' ? window.location.hostname : 'volt-connect-2-0.vercel.app';
     return `Domain Not Authorized in Firebase: "${domain}" is not added to your Firebase Authorized Domains. In Firebase Console, navigate to Authentication -> Settings -> Authorized domains and click "Add domain" for "${domain}".`;
   }
