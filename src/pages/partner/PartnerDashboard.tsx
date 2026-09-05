@@ -277,8 +277,12 @@ export const PartnerDashboard: React.FC = () => {
     loadPartnerData();
   };
 
+  useEffect(() => {
+    console.log(`[PORTAL_RUNTIME] role=${user?.role || 'anon'} uid=${user?.uid || 'anon'} pathname=${window.location.pathname} portal=partner component=PartnerDashboard`);
+  }, [user?.role, user?.uid]);
+
   return (
-    <div className="space-y-8 pb-16 vc-page-enter">
+    <div data-portal="partner" className="space-y-8 pb-16 vc-page-enter">
       
       {/* 1. B2B PARTNER COMMAND HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 p-6 sm:p-8 rounded-3xl bg-slate-900 text-white shadow-2xl border border-slate-800">

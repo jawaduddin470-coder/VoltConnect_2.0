@@ -33,7 +33,7 @@ import { TechnicianDashboard } from '@/pages/technician/TechnicianDashboard';
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
 import { UserRole } from '@/types';
 
-// Protected Route Guard
+// Protected Route Guard with Absolute Portal Isolation
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserRole[] }> = ({
   children,
   allowedRoles,
@@ -54,8 +54,23 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
     );
   }
 
-  // Handle Unauthenticated User -> Render Premium Auth Gate View inside AppLayout
+  const pathname = location.pathname;
+  const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/');
+  const isPartnerRoute = pathname === '/partner' || pathname.startsWith('/partner/');
+  const isTechnicianRoute = pathname === '/technician' || pathname.startsWith('/technician/');
+
+  // 1. Handle Unauthenticated Visitors per Portal:
   if (!user) {
+    if (isAdminRoute) {
+      return <Navigate to="/login/admin" replace />;
+    }
+    if (isPartnerRoute) {
+      return <Navigate to="/login/partner" replace />;
+    }
+    if (isTechnicianRoute) {
+      return <Navigate to="/login/technician" replace />;
+    }
+    // Driver unauthenticated visitor -> Render Premium Auth Gate View inside AppLayout
     return (
       <AppLayout>
         <AuthGateView />
@@ -63,20 +78,54 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
     );
   }
 
-  // Handle Incomplete Driver Profile -> Force Onboarding
-  if (role === 'driver' && !onboardingComplete && location.pathname !== '/onboarding') {
+  // 2. Handle Admin Routes: strictly allowed for 'admin' and 'super_admin'
+  if (isAdminRoute) {
+    if (role !== 'admin' && role !== 'super_admin') {
+      if (role === 'partner') return <Navigate to="/partner/dashboard" replace />;
+      if (role === 'technician') return <Navigate to="/technician/dashboard" replace />;
+      return <Navigate to="/dashboard" replace />;
+    }
+    return <>{children}</>;
+  }
+
+  // 3. Handle Partner Routes: allowed for 'partner', 'admin', 'super_admin'
+  if (isPartnerRoute) {
+    if (role !== 'partner' && role !== 'admin' && role !== 'super_admin') {
+      if (role === 'technician') return <Navigate to="/technician/dashboard" replace />;
+      return <Navigate to="/dashboard" replace />;
+    }
+    return <>{children}</>;
+  }
+
+  // 4. Handle Technician Routes: allowed for 'technician', 'admin', 'super_admin'
+  if (isTechnicianRoute) {
+    if (role !== 'technician' && role !== 'admin' && role !== 'super_admin') {
+      if (role === 'partner') return <Navigate to="/partner/dashboard" replace />;
+      return <Navigate to="/dashboard" replace />;
+    }
+    return <>{children}</>;
+  }
+
+  // 5. Handle Driver Routes (all other protected routes):
+  // Non-drivers attempting to enter driver portal are redirected to their own dedicated command center
+  if (role === 'admin' || role === 'super_admin') {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+  if (role === 'partner') {
+    return <Navigate to="/partner/dashboard" replace />;
+  }
+  if (role === 'technician') {
+    return <Navigate to="/technician/dashboard" replace />;
+  }
+
+  // At this point, the user is guaranteed to be a DRIVER (role === 'driver')
+  // Incomplete Driver Profile -> Force Onboarding
+  if (!onboardingComplete && pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
   }
 
-  // Handle Complete Driver Profile visiting /onboarding -> Redirect to Dashboard
-  if (role === 'driver' && onboardingComplete && location.pathname === '/onboarding') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  if (allowedRoles && !allowedRoles.includes(role)) {
-    if (role === 'partner') return <Navigate to="/partner/dashboard" replace />;
-    if (role === 'technician') return <Navigate to="/technician/dashboard" replace />;
-    if (role === 'admin' || role === 'super_admin') return <Navigate to="/admin/dashboard" replace />;
+  // Complete Driver Profile visiting /onboarding -> Redirect to Dashboard
+  if (onboardingComplete && pathname === '/onboarding') {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -86,9 +135,14 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
 // Main App Layout Shell
 const AppLayout: React.FC<{ children: React.ReactNode; hideFooter?: boolean }> = ({ children, hideFooter = false }) => {
   const location = useLocation();
+  const { user, role } = useAuth();
+
+  useEffect(() => {
+    console.log(`[PORTAL_RUNTIME] role=${role} uid=${user?.uid || 'anon'} pathname=${location.pathname} portal=driver component=AppLayout`);
+  }, [role, user?.uid, location.pathname]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 ev-pattern-bg">
+    <div data-portal="driver" className="min-h-screen flex flex-col bg-slate-50 ev-pattern-bg">
       <Navbar />
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-28 sm:pb-32 lg:pb-8">
         <ErrorBoundary>

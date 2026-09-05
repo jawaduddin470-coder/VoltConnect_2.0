@@ -13,7 +13,6 @@ import {
   User,
   LogOut,
   Wrench,
-  Building2,
   Lock,
   ChevronDown,
   Sparkles,
@@ -28,11 +27,10 @@ import {
 import { UserRole } from '@/types';
 
 export const Navbar: React.FC = () => {
-  const { user, role, logout, switchRole, activeVehicle, vehicles, setActiveVehicle } = useAuth();
+  const { user, role, logout, activeVehicle, vehicles, setActiveVehicle } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showVehicleMenu, setShowVehicleMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -44,7 +42,6 @@ export const Navbar: React.FC = () => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (navRef.current && !navRef.current.contains(event.target as Node)) {
-        setShowRoleMenu(false);
         setShowVehicleMenu(false);
         setShowProfileMenu(false);
         setShowNotifications(false);
@@ -57,15 +54,6 @@ export const Navbar: React.FC = () => {
 
   const isActive = (path: string) => location.pathname === path;
   const isMyEVActive = ['/garage', '/health', '/care', '/insight'].includes(location.pathname);
-
-  const handleRoleSelect = (newRole: UserRole) => {
-    switchRole(newRole);
-    setShowRoleMenu(false);
-    if (newRole === 'partner') navigate('/partner/dashboard');
-    else if (newRole === 'technician') navigate('/technician/dashboard');
-    else if (newRole === 'admin') navigate('/admin/dashboard');
-    else navigate('/dashboard');
-  };
 
   const handleLogout = async () => {
     setShowProfileMenu(false);
@@ -271,53 +259,7 @@ export const Navbar: React.FC = () => {
                   )}
                 </div>
 
-                {/* 2. Role Switcher Badge */}
-                <div className="relative hidden md:block">
-                  <button
-                    onClick={() => setShowRoleMenu(!showRoleMenu)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold hover:bg-amber-100 transition-all"
-                    title="Switch Ecosystem Role View"
-                  >
-                    <Shield className="w-3.5 h-3.5 text-amber-600" />
-                    <span className="capitalize">{role}</span>
-                    <ChevronDown className="w-3 h-3 text-amber-600" />
-                  </button>
 
-                  {showRoleMenu && (
-                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-card-hover border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2">
-                      <div className="px-3.5 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        Ecosystem Role Portal
-                      </div>
-                      <button
-                        onClick={() => handleRoleSelect('driver')}
-                        className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold hover:bg-slate-50 transition-colors ${
-                          role === 'driver' ? 'text-teal-600 bg-teal-50' : 'text-slate-700'
-                        }`}
-                      >
-                        <User className="w-4 h-4 text-teal-500" />
-                        Driver Platform
-                      </button>
-                      <button
-                        onClick={() => handleRoleSelect('partner')}
-                        className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold hover:bg-slate-50 transition-colors ${
-                          role === 'partner' ? 'text-sky-600 bg-sky-50' : 'text-slate-700'
-                        }`}
-                      >
-                        <Building2 className="w-4 h-4 text-sky-500" />
-                        CPO Partner Portal
-                      </button>
-                      <button
-                        onClick={() => handleRoleSelect('technician')}
-                        className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold hover:bg-slate-50 transition-colors ${
-                          role === 'technician' ? 'text-amber-600 bg-amber-50' : 'text-slate-700'
-                        }`}
-                      >
-                        <Wrench className="w-4 h-4 text-amber-500" />
-                        Field Technician Portal
-                      </button>
-                    </div>
-                  )}
-                </div>
 
                 {/* 3. Notifications Popover Control */}
                 <div className="relative hidden xs:block">

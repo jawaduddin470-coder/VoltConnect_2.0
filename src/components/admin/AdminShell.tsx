@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogoCompact } from '@/assets/LogoCompact';
@@ -65,8 +65,12 @@ export const AdminShell: React.FC<AdminShellProps> = ({ children }) => {
     return current ? current.label : 'Overview';
   };
 
+  useEffect(() => {
+    console.log(`[PORTAL_RUNTIME] role=${role} uid=${user?.uid || 'anon'} pathname=${location.pathname} portal=admin component=AdminShell`);
+  }, [role, user?.uid, location.pathname]);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div data-portal="admin" className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       
       {/* 1. TOP OPERATIONAL NAVIGATION BAR */}
       <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 h-16 flex items-center justify-between px-4 sm:px-6 shadow-md">

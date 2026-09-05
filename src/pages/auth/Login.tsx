@@ -11,7 +11,6 @@ export const Login: React.FC = () => {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('driver');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -34,12 +33,12 @@ export const Login: React.FC = () => {
 
     setLoading(true);
     try {
-      const profile = await login(email, password, selectedRole);
-      if (selectedRole === 'partner') navigate('/partner/dashboard');
-      else if (selectedRole === 'technician') navigate('/technician/dashboard');
-      else if (selectedRole === 'admin') navigate('/admin/dashboard');
-      else if (!profile.onboardingComplete) navigate('/onboarding');
-      else navigate('/dashboard');
+      const profile = await login(email, password, 'driver');
+      if (!profile.onboardingComplete) {
+        navigate('/onboarding');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Login failed. Please verify your credentials.');
     } finally {
@@ -181,35 +180,32 @@ export const Login: React.FC = () => {
             />
           </div>
 
-          {/* Role Selector */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700">Login Role Portal</label>
-            <select
-              value={selectedRole}
-              onChange={e => setSelectedRole(e.target.value as UserRole)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 font-bold text-slate-900 text-xs bg-slate-50"
-            >
-              <option value="driver">EV Driver Platform</option>
-              <option value="partner">CPO Partner Portal</option>
-              <option value="technician">Field Technician Portal</option>
-              <option value="admin">Platform Administration</option>
-            </select>
-          </div>
-
           <button
             type="submit"
             disabled={loading || googleLoading}
             className="w-full vc-btn vc-btn-teal py-3.5 text-sm font-extrabold flex items-center justify-center gap-2 shadow-md"
           >
-            {loading ? 'Authenticating...' : 'Sign In'} <ArrowRight className="w-4 h-4" />
+            {loading ? 'Authenticating...' : 'Sign In as Driver'} <ArrowRight className="w-4 h-4" />
           </button>
         </form>
 
-        <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100">
-          Don't have an account?{' '}
-          <Link to="/signup" className="font-bold text-sky-600 hover:underline">
-            Register Here
-          </Link>
+        <div className="space-y-3 pt-2 border-t border-slate-100 text-center text-xs">
+          <div className="text-slate-500">
+            Don't have an account?{' '}
+            <Link to="/signup" className="font-bold text-sky-600 hover:underline">
+              Register as Driver
+            </Link>
+          </div>
+
+          <div className="flex items-center justify-center gap-3 text-[11px] text-slate-400 font-medium pt-1">
+            <Link to="/login/partner" className="hover:text-sky-600 transition-colors">
+              CPO Partner Portal →
+            </Link>
+            <span>•</span>
+            <Link to="/login/admin" className="hover:text-sky-600 transition-colors">
+              Admin Console →
+            </Link>
+          </div>
         </div>
       </div>
 

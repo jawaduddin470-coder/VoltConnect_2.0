@@ -246,6 +246,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, pass: string, role?: UserRole): Promise<UserProfile> => {
     setLoading(true);
+    // Clear any previous session residue before authenticating
+    setUser(null);
+    localStorage.removeItem('vc_user');
+
     try {
       const fbUser = await loginWithFirebase(email, pass);
       let profile = await fetchUserProfile(fbUser.uid);
@@ -278,6 +282,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error('This account has been suspended by administration. Please contact support.');
         }
 
+        // Authoritative role validation if logging into the Driver portal
+        if (role === 'driver') {
+          if (profile.role === 'admin' || profile.role === 'super_admin') {
+            await logoutFirebase().catch(() => {});
+            setUser(null);
+            localStorage.removeItem('vc_user');
+            throw new Error("This account has Administrator privileges. Please sign in via the Admin Command Center at /login/admin.");
+          }
+          if (profile.role === 'partner') {
+            await logoutFirebase().catch(() => {});
+            setUser(null);
+            localStorage.removeItem('vc_user');
+            throw new Error("This account is registered as a CPO Partner. Please sign in via the Partner Portal at /login/partner.");
+          }
+          if (profile.role === 'technician') {
+            await logoutFirebase().catch(() => {});
+            setUser(null);
+            localStorage.removeItem('vc_user');
+            throw new Error("This account is registered as a Field Technician. Please sign in via the Technician Portal at /login/technician.");
+          }
+        }
+
         // Authoritative role validation if portal requested specific role
         if (role && role !== 'driver') {
           const isAllowed =
@@ -301,7 +327,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return profile;
     } catch (err: any) {
       const rawMsg = err?.message || '';
-      const friendlyMsg = rawMsg.startsWith('Unauthorized:') || rawMsg.includes('suspended')
+      const friendlyMsg = rawMsg.startsWith('Unauthorized:') || rawMsg.includes('suspended') || rawMsg.includes('privileges') || rawMsg.includes('registered as')
         ? rawMsg
         : getAuthErrorMessage(err);
       console.error('[AuthContext] Login error:', err);
@@ -395,8 +421,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setActiveVehicleState(null);
       localStorage.removeItem('vc_user');
       localStorage.removeItem('vc_vehicles');
-      sessionStorage.removeItem('vc_onboarding_step');
-      sessionStorage.removeItem('vc_onboarding_name');
+      sessionStorage.clear();
     }
   };
 
