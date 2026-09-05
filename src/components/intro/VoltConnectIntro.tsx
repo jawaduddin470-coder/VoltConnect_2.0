@@ -32,8 +32,8 @@ export const VoltConnectIntro: React.FC<VoltConnectIntroProps> = ({
   const pausedTimeRef = useRef<number>(0);
   const lastTimestampRef = useRef<number>(0);
 
-  // Total cinematic timeline duration: 11.0 seconds for optimal storytelling pacing
-  const TOTAL_DURATION_MS = 11000;
+  // Total cinematic timeline duration: 18.5 seconds for complete 9-scene ecosystem storytelling
+  const TOTAL_DURATION_MS = 18500;
 
   // Initialize intro visibility based on first-time visit, URL debug params, or forced replay
   useEffect(() => {
@@ -209,7 +209,7 @@ export const VoltConnectIntro: React.FC<VoltConnectIntroProps> = ({
         <div className="flex items-center gap-2.5">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-[11px] font-mono font-bold tracking-[0.2em] text-slate-400 uppercase">
-            VOLTCONNECT 2.0 • MOBILITY EXPERIENCE
+            VOLTCONNECT 2.0 • ECOSYSTEM EXPERIENCE
           </span>
         </div>
 
