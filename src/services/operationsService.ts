@@ -104,11 +104,17 @@ class OperationsService {
     };
     this.pendingStations.unshift(pendingStation);
 
+    let writeSucceeded = true;
     try {
       const { setDocument } = await import('./firebase/firestore');
-      await setDocument('stations', pendingStation.id, pendingStation);
-    } catch (err) {
+      const saved = await setDocument('stations', pendingStation.id, pendingStation);
+      if (saved === false) {
+        console.warn('[OperationsService] Firestore setDocument returned false for pending station:', pendingStation.id);
+        writeSucceeded = false;
+      }
+    } catch (err: any) {
       console.warn('[OperationsService] Failed to persist pending station to Firestore:', err);
+      writeSucceeded = false;
     }
 
     try {
@@ -116,6 +122,22 @@ class OperationsService {
       chargingDataService.addOrUpdateStation(pendingStation);
     } catch {
       // safe fallback
+    }
+
+    if (station.createdBy) {
+      this.logAuditEvent(
+        station.createdBy,
+        station.operatorName || 'partner',
+        'partner',
+        'PARTNER_SUBMIT_STATION',
+        'stations',
+        pendingStation.id,
+        {
+          stationName: pendingStation.name,
+          city: pendingStation.city,
+          writeSucceeded,
+        }
+      );
     }
 
     return pendingStation;
@@ -151,6 +173,7 @@ class OperationsService {
       reviewedBy: reviewerId,
       reviewedAt: new Date().toISOString(),
       admin_verified: status === 'approved',
+      status: status === 'approved' ? 'active' : 'inactive',
       rejectionReason: status === 'rejected' ? rejectionReason || 'Station does not meet verification guidelines' : undefined,
       lastUpdated: new Date().toISOString(),
     };
@@ -170,6 +193,7 @@ class OperationsService {
     try {
       const { chargingDataService } = await import('./chargingDataService');
       await chargingDataService.updateStation(stationId, updateData);
+      chargingDataService.clearCache();
     } catch {
       // safe fallback
     }

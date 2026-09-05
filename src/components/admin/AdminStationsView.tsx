@@ -301,7 +301,7 @@ export const AdminStationsView: React.FC = () => {
 
           <div className="flex items-center gap-2 text-xs font-bold text-slate-400 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 shrink-0">
             <Zap className="w-4 h-4 text-sky-400" />
-            <span>{filteredStations.length} of {stations.length} Hubs Loaded</span>
+            <span>{displayMode === 'MAP' ? `${stations.length} Hubs on Network Map` : `${filteredStations.length} of ${stations.length} Hubs Loaded`}</span>
           </div>
         </div>
       </div>

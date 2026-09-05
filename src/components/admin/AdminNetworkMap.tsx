@@ -42,25 +42,31 @@ interface SpatialCluster {
 }
 
 function computeSpatialClusters(stations: ChargingStation[], zoom: number): SpatialCluster[] {
-  if (zoom >= 13) {
-    return stations
-      .filter(s => !isNaN(s.latitude) && !isNaN(s.longitude))
-      .map(s => ({
-        id: `st-${s.id}`,
-        lat: s.latitude,
-        lng: s.longitude,
-        stations: [s],
-        bounds: L.latLngBounds([s.latitude, s.longitude], [s.latitude, s.longitude]),
-      }));
+  const validStations = stations.filter(
+    s => !isNaN(Number(s.latitude)) && !isNaN(Number(s.longitude)) &&
+         s.latitude >= -90 && s.latitude <= 90 &&
+         s.longitude >= -180 && s.longitude <= 180
+  );
+
+  // Zoom >= 8: Render 100% individual station markers with zero aggregation
+  if (zoom >= 8) {
+    return validStations.map(s => ({
+      id: `st-${s.id}`,
+      lat: s.latitude,
+      lng: s.longitude,
+      stations: [s],
+      bounds: L.latLngBounds([s.latitude, s.longitude], [s.latitude, s.longitude]),
+    }));
   }
 
-  const gridSize = 360 / Math.pow(2, zoom + 1);
+  // Adaptive fine-grained spatial clustering for zoom < 8
+  // Produces 40-80 regional hub clusters across India rather than over-aggregating into 5 nodes
+  const gridSize = 10 / Math.pow(2, zoom - 2);
   const clustersMap = new Map<string, SpatialCluster>();
 
-  for (const station of stations) {
+  for (const station of validStations) {
     const lat = Number(station.latitude);
     const lng = Number(station.longitude);
-    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
 
     const cellX = Math.floor((lng + 180) / gridSize);
     const cellY = Math.floor((lat + 90) / gridSize);
@@ -225,6 +231,10 @@ export const AdminNetworkMap: React.FC<AdminNetworkMapProps> = ({
         });
 
         const m = L.marker([st.latitude, st.longitude], { icon });
+        m.bindTooltip(`<b>${st.name}</b><br/><span style="color:#94a3b8">${st.city} • ${st.chargers?.[0]?.powerKW || 60} kW</span>`, {
+          direction: 'top',
+          offset: [0, -14],
+        });
         m.on('click', () => {
           setSelectedStation(st);
           setIsChangingLocation(false);
@@ -265,8 +275,12 @@ export const AdminNetworkMap: React.FC<AdminNetworkMapProps> = ({
         });
 
         const cm = L.marker([cluster.lat, cluster.lng], { icon: clusterIcon });
+        cm.bindTooltip(`<b>${cluster.stations.length} Charging Hubs</b><br/><span style="color:#94a3b8">Click to zoom in</span>`, {
+          direction: 'top',
+          offset: [0, -18],
+        });
         cm.on('click', () => {
-          mapInstanceRef.current?.fitBounds(cluster.bounds, { padding: [40, 40] });
+          mapInstanceRef.current?.fitBounds(cluster.bounds.pad(0.3), { maxZoom: 14 });
         });
         cm.addTo(markersGroupRef.current!);
       }
@@ -545,8 +559,8 @@ export const AdminNetworkMap: React.FC<AdminNetworkMapProps> = ({
   return (
     <div className="space-y-4">
       {/* Top Map Controls */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-2xl bg-slate-900 border border-slate-800">
-        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 p-4 rounded-2xl bg-slate-900 border border-slate-800">
+        <div className="flex items-center gap-2 overflow-x-auto w-full lg:w-auto">
           {(['ALL', 'pending', 'approved', 'rejected', 'inactive'] as const).map(st => (
             <button
               key={st}
@@ -562,15 +576,22 @@ export const AdminNetworkMap: React.FC<AdminNetworkMapProps> = ({
           ))}
         </div>
 
-        <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search map stations..."
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
-          />
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-sky-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 shrink-0 w-full sm:w-auto justify-center">
+            <Zap className="w-3.5 h-3.5 text-sky-400" />
+            <span>{filtered.length} of {stations.length} Station Pins on Canvas</span>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search map stations..."
+              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+            />
+          </div>
         </div>
       </div>
 

@@ -27,6 +27,8 @@ import {
   Layers,
 } from 'lucide-react';
 
+type SubmissionState = 'IDLE' | 'VALIDATING' | 'SUBMITTING' | 'SUCCESS' | 'ERROR';
+
 export const PartnerDashboard: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'stations' | 'add_hub' | 'reports' | 'feeds' | 'profile'>('overview');
@@ -52,6 +54,7 @@ export const PartnerDashboard: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionState, setSubmissionState] = useState<SubmissionState>('IDLE');
 
   // Editing Station State
   const [editingStation, setEditingStation] = useState<ChargingStation | null>(null);
@@ -77,70 +80,78 @@ export const PartnerDashboard: React.FC = () => {
     if (!editingStation || !user) return;
 
     const prevTariff = editingStation.chargers[0]?.pricingPerKWh || 18;
+    setIsSubmitting(true);
 
-    if (isResubmitting) {
-      // Re-submitting rejected station resets status to 'pending' and clears rejectionReason
-      const resubmitted = await operationsService.submitStationForApproval({
-        ...editingStation,
+    try {
+      if (isResubmitting) {
+        // Re-submitting rejected station resets status to 'pending' and clears rejectionReason
+        const resubmitted = await operationsService.submitStationForApproval({
+          ...editingStation,
+          name: editName,
+          address: editAddress,
+          operatingHours: editHours,
+          is24x7: editHours.includes('24/7'),
+          verificationStatus: 'pending',
+          rejectionReason: undefined,
+          chargers: editingStation.chargers.map(c => ({
+            ...c,
+            pricingPerKWh: editTariff,
+            powerKW: editPower,
+            pricingDisplay: `₹${editTariff} / kWh`,
+          })),
+        });
+
+        chargingDataService.clearCache();
+        setPartnerStations(prev => prev.map(s => (s.id === resubmitted.id ? resubmitted : s)));
+        operationsService.logAuditEvent(
+          user.uid,
+          user.email,
+          'partner',
+          'PARTNER_STATION_RESUBMITTED',
+          'stations',
+          editingStation.id,
+          { previousReason: editingStation.rejectionReason, stationName: editName }
+        );
+        setEditingStation(null);
+        setIsResubmitting(false);
+        return;
+      }
+
+      await chargingDataService.updateStationTariff(editingStation.id, editTariff, editPower);
+      const updatedStation = await chargingDataService.updateStation(editingStation.id, {
         name: editName,
         address: editAddress,
         operatingHours: editHours,
         is24x7: editHours.includes('24/7'),
-        verificationStatus: 'pending',
-        rejectionReason: undefined,
-        chargers: editingStation.chargers.map(c => ({
-          ...c,
-          pricingPerKWh: editTariff,
-          powerKW: editPower,
-          pricingDisplay: `₹${editTariff} / kWh`,
-        })),
       });
 
-      setPartnerStations(prev => prev.map(s => (s.id === resubmitted.id ? resubmitted : s)));
+      if (updatedStation) {
+        setPartnerStations(prev => prev.map(s => (s.id === updatedStation.id ? updatedStation : s)));
+      }
+
       operationsService.logAuditEvent(
         user.uid,
         user.email,
         'partner',
-        'PARTNER_STATION_RESUBMITTED',
+        'PARTNER_TARIFF_UPDATE',
         'stations',
         editingStation.id,
-        { previousReason: editingStation.rejectionReason, stationName: editName }
+        {
+          stationName: editName,
+          oldTariff: prevTariff,
+          newTariff: editTariff,
+          powerKW: editPower,
+        },
+        prevTariff,
+        editTariff
       );
+
       setEditingStation(null);
-      setIsResubmitting(false);
-      return;
+    } catch (err) {
+      console.error('Failed to save station edit:', err);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    await chargingDataService.updateStationTariff(editingStation.id, editTariff, editPower);
-    const updatedStation = await chargingDataService.updateStation(editingStation.id, {
-      name: editName,
-      address: editAddress,
-      operatingHours: editHours,
-      is24x7: editHours.includes('24/7'),
-    });
-
-    if (updatedStation) {
-      setPartnerStations(prev => prev.map(s => (s.id === updatedStation.id ? updatedStation : s)));
-    }
-
-    operationsService.logAuditEvent(
-      user.uid,
-      user.email,
-      'partner',
-      'PARTNER_TARIFF_UPDATE',
-      'stations',
-      editingStation.id,
-      {
-        stationName: editName,
-        oldTariff: prevTariff,
-        newTariff: editTariff,
-        powerKW: editPower,
-      },
-      prevTariff,
-      editTariff
-    );
-
-    setEditingStation(null);
   };
 
   const loadPartnerData = async () => {
@@ -165,33 +176,44 @@ export const PartnerDashboard: React.FC = () => {
     e.preventDefault();
     if (!user) return;
 
+    setSubmissionState('VALIDATING');
+    setFormError(null);
+    setFormSuccess(null);
+
+    // Explicit Validation Checkpoints
     if (!name.trim() || name.trim().length < 3) {
       setFormError('Station Name must be at least 3 characters.');
+      setSubmissionState('ERROR');
       return;
     }
     if (!address.trim() || address.trim().length < 5) {
       setFormError('Street Address must be at least 5 characters.');
+      setSubmissionState('ERROR');
       return;
     }
     if (isNaN(lat) || lat < -90 || lat > 90) {
       setFormError('Latitude must be a valid coordinate between -90 and 90.');
+      setSubmissionState('ERROR');
       return;
     }
     if (isNaN(lng) || lng < -180 || lng > 180) {
       setFormError('Longitude must be a valid coordinate between -180 and 180.');
+      setSubmissionState('ERROR');
       return;
     }
     if (isNaN(powerKW) || powerKW <= 0 || powerKW > 360) {
       setFormError('Max DC Power must be between 1 kW and 360 kW.');
+      setSubmissionState('ERROR');
       return;
     }
     if (isNaN(pricePerKWh) || pricePerKWh <= 0 || pricePerKWh > 150) {
       setFormError('Tariff rate must be between ₹1 and ₹150 / kWh.');
+      setSubmissionState('ERROR');
       return;
     }
 
+    setSubmissionState('SUBMITTING');
     setIsSubmitting(true);
-    setFormError(null);
 
     try {
       const newStation = await operationsService.submitStationForApproval({
@@ -229,18 +251,22 @@ export const PartnerDashboard: React.FC = () => {
 
       chargingDataService.clearCache();
       setPartnerStations(prev => [newStation, ...prev.filter(s => s.id !== newStation.id)]);
-      setFormSuccess('Station submitted for Admin Verification! Status: Pending Approval.');
+      setSubmissionState('SUCCESS');
+      setFormSuccess('✓ Station Submitted — Awaiting Administrator Verification');
 
       setTimeout(() => {
         setShowAddModal(false);
+        setActiveTab('stations');
         setStep(1);
         setName('');
         setAddress('');
         setFormSuccess(null);
         setFormError(null);
-      }, 1500);
+        setSubmissionState('IDLE');
+      }, 1600);
     } catch (err: any) {
-      setFormError(err?.message || 'Failed to submit station.');
+      setSubmissionState('ERROR');
+      setFormError(err?.message || 'Failed to submit station for review. Please verify connection.');
     } finally {
       setIsSubmitting(false);
     }
@@ -270,21 +296,22 @@ export const PartnerDashboard: React.FC = () => {
 
         <button
           onClick={() => {
+            setActiveTab('add_hub');
             setStep(1);
             setShowAddModal(true);
           }}
-          className="vc-btn vc-btn-teal py-3 px-5 text-xs font-extrabold flex items-center gap-2 shrink-0 shadow-lg hover:scale-105 transition-all"
+          className="px-5 py-3 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-extrabold flex items-center gap-2 shrink-0 shadow-lg hover:scale-105 transition-all"
         >
           <Plus className="w-4 h-4" /> Add Charging Hub
         </button>
       </div>
 
       {/* 2. 6-SECTION NAVIGATION TABS */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-3 text-xs font-bold overflow-x-auto no-scrollbar flex-nowrap">
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3 text-xs font-bold overflow-x-auto no-scrollbar flex-nowrap">
         <button
           onClick={() => setActiveTab('overview')}
           className={`px-4 py-2 rounded-xl transition-all shrink-0 ${
-            activeTab === 'overview' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+            activeTab === 'overview' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
           }`}
         >
           Overview
@@ -293,7 +320,7 @@ export const PartnerDashboard: React.FC = () => {
         <button
           onClick={() => setActiveTab('stations')}
           className={`px-4 py-2 rounded-xl transition-all shrink-0 flex items-center gap-1.5 ${
-            activeTab === 'stations' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+            activeTab === 'stations' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
@@ -302,10 +329,13 @@ export const PartnerDashboard: React.FC = () => {
 
         <button
           onClick={() => {
+            setActiveTab('add_hub');
             setStep(1);
             setShowAddModal(true);
           }}
-          className="px-4 py-2 rounded-xl transition-all shrink-0 text-teal-600 hover:bg-teal-50 flex items-center gap-1 font-extrabold"
+          className={`px-4 py-2 rounded-xl transition-all shrink-0 flex items-center gap-1.5 font-extrabold ${
+            activeTab === 'add_hub' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-teal-400 hover:text-white border border-slate-800'
+          }`}
         >
           <Plus className="w-3.5 h-3.5" /> Add Charging Hub
         </button>
@@ -313,7 +343,7 @@ export const PartnerDashboard: React.FC = () => {
         <button
           onClick={() => setActiveTab('reports')}
           className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'reports' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+            activeTab === 'reports' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
           }`}
         >
           <Flag className="w-3.5 h-3.5" />
@@ -328,7 +358,7 @@ export const PartnerDashboard: React.FC = () => {
         <button
           onClick={() => setActiveTab('feeds')}
           className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'feeds' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+            activeTab === 'feeds' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
           }`}
         >
           <Radio className="w-3.5 h-3.5" /> Telemetry Feeds
@@ -337,7 +367,7 @@ export const PartnerDashboard: React.FC = () => {
         <button
           onClick={() => setActiveTab('profile')}
           className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 ${
-            activeTab === 'profile' ? 'bg-navy-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+            activeTab === 'profile' ? 'bg-sky-500 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
           }`}
         >
           <User className="w-3.5 h-3.5" /> CPO Profile
@@ -348,31 +378,31 @@ export const PartnerDashboard: React.FC = () => {
       {activeTab === 'overview' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="vc-card p-5 space-y-1 bg-white border border-slate-200">
+            <div className="p-5 space-y-1 bg-slate-900 border border-slate-800 rounded-2xl shadow-sm">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Managed Hubs</span>
-              <div className="font-heading font-extrabold text-3xl text-navy-900">{partnerStations.length}</div>
+              <div className="font-heading font-extrabold text-3xl text-white">{partnerStations.length}</div>
               <span className="text-[10px] text-slate-500 font-bold">Total Partner Infrastructure</span>
             </div>
 
-            <div className="vc-card p-5 space-y-1 bg-white border border-slate-200">
+            <div className="p-5 space-y-1 bg-slate-900 border border-slate-800 rounded-2xl shadow-sm">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Verified Public Hubs</span>
-              <div className="font-heading font-extrabold text-3xl text-emerald-600">
+              <div className="font-heading font-extrabold text-3xl text-emerald-400">
                 {partnerStations.filter(s => s.verificationStatus === 'approved').length}
               </div>
               <span className="text-[10px] text-slate-500 font-bold">Live on VoltMap & Routing</span>
             </div>
 
-            <div className="vc-card p-5 space-y-1 bg-white border border-slate-200">
+            <div className="p-5 space-y-1 bg-slate-900 border border-slate-800 rounded-2xl shadow-sm">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pending Review</span>
-              <div className="font-heading font-extrabold text-3xl text-amber-600">
+              <div className="font-heading font-extrabold text-3xl text-amber-400">
                 {partnerStations.filter(s => s.verificationStatus === 'pending').length}
               </div>
               <span className="text-[10px] text-slate-500 font-bold">Awaiting Admin Verification</span>
             </div>
 
-            <div className="vc-card p-5 space-y-1 bg-white border border-slate-200">
+            <div className="p-5 space-y-1 bg-slate-900 border border-slate-800 rounded-2xl shadow-sm">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rejected / Needs Review</span>
-              <div className="font-heading font-extrabold text-3xl text-rose-600">
+              <div className="font-heading font-extrabold text-3xl text-rose-400">
                 {partnerStations.filter(s => s.verificationStatus === 'rejected').length}
               </div>
               <span className="text-[10px] text-slate-500 font-bold">Requires Resubmission</span>
@@ -380,11 +410,11 @@ export const PartnerDashboard: React.FC = () => {
           </div>
 
           {/* Verification Policy Alert */}
-          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div>
               <div className="font-bold">Mandatory Admin Verification Policy</div>
-              <p className="mt-0.5 text-amber-700">
+              <p className="mt-0.5 text-amber-200/80">
                 In accordance with VoltConnect safety and data integrity policies, no partner station is automatically approved.
                 Every submission enters the Admin Command Center queue for coordinate verification, physical access audit, and power rating confirmation before being exposed to EV drivers.
               </p>
@@ -395,27 +425,29 @@ export const PartnerDashboard: React.FC = () => {
 
       {/* 4. MY INFRASTRUCTURE TAB */}
       {activeTab === 'stations' && (
-        <div className="vc-card p-6 bg-white border border-slate-200 rounded-3xl space-y-4 shadow-xs">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="p-6 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Partner Infrastructure</span>
-              <h2 className="font-heading text-xl font-extrabold text-navy-900">Station Inventory</h2>
+              <h2 className="font-heading text-xl font-extrabold text-white">Station Inventory</h2>
             </div>
-            <span className="vc-badge vc-badge-navy text-[10px]">{partnerStations.length} Hubs Registered</span>
+            <span className="text-xs font-bold text-sky-400 bg-slate-950 px-3 py-1 rounded-xl border border-slate-800">
+              {partnerStations.length} Hubs Registered
+            </span>
           </div>
 
           {partnerStations.length === 0 ? (
-            <div className="p-12 text-center space-y-3 bg-slate-50 rounded-2xl border border-slate-200">
-              <Building2 className="w-10 h-10 text-slate-300 mx-auto" />
-              <div className="font-heading font-extrabold text-base text-navy-900">No Stations Registered Yet</div>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
+            <div className="p-12 text-center space-y-3 bg-slate-950 rounded-2xl border border-slate-800">
+              <Building2 className="w-10 h-10 text-slate-600 mx-auto" />
+              <div className="font-heading font-extrabold text-base text-white">No Stations Registered Yet</div>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
                 Click "Add Charging Hub" to submit your EV charging station for Admin verification and public VoltMap indexing.
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-medium text-slate-700">
-                <thead className="border-b border-slate-200 font-bold text-[10px] text-slate-400 uppercase tracking-wider">
+              <table className="w-full text-left text-xs font-medium text-slate-300">
+                <thead className="border-b border-slate-800 font-bold text-[10px] text-slate-400 uppercase tracking-wider bg-slate-950/50">
                   <tr>
                     <th className="py-3 px-4">Station Name</th>
                     <th className="py-3 px-4">Location</th>
@@ -425,36 +457,36 @@ export const PartnerDashboard: React.FC = () => {
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-800">
                   {partnerStations.map(st => {
                     const isRejected = st.verificationStatus === 'rejected';
                     const isApproved = st.verificationStatus === 'approved';
 
                     return (
                       <React.Fragment key={st.id}>
-                        <tr className={`transition-colors ${isRejected ? 'bg-rose-50/50' : 'hover:bg-slate-50'}`}>
-                          <td className="py-3.5 px-4 font-bold text-navy-900">
+                        <tr className={`transition-colors ${isRejected ? 'bg-rose-500/10' : 'hover:bg-slate-800/40'}`}>
+                          <td className="py-3.5 px-4 font-bold text-white">
                             <div>{st.name}</div>
-                            <div className="text-[10px] text-slate-400 font-normal">ID: {st.id}</div>
+                            <div className="text-[10px] text-slate-500 font-mono">ID: {st.id}</div>
                           </td>
-                          <td className="py-3.5 px-4 text-slate-500">
+                          <td className="py-3.5 px-4 text-slate-400">
                             <div>{st.address}</div>
-                            <div className="text-[10px] text-slate-400">{st.city} ({st.latitude?.toFixed(4)}, {st.longitude?.toFixed(4)})</div>
+                            <div className="text-[10px] text-slate-500">{st.city} ({st.latitude?.toFixed(4)}, {st.longitude?.toFixed(4)})</div>
                           </td>
-                          <td className="py-3.5 px-4 font-bold text-sky-600">
+                          <td className="py-3.5 px-4 font-bold text-sky-400">
                             {st.chargers[0]?.powerKW || 60} kW ({st.chargers[0]?.connectorType || 'CCS2'})
                           </td>
-                          <td className="py-3.5 px-4 font-bold text-slate-800">
+                          <td className="py-3.5 px-4 font-bold text-slate-200">
                             ₹{st.chargers[0]?.pricingPerKWh || 18} / kWh
                           </td>
                           <td className="py-3.5 px-4">
                             <span
-                              className={`vc-badge text-[9px] uppercase font-bold ${
+                              className={`px-2 py-0.5 rounded text-[9px] uppercase font-extrabold ${
                                 isApproved
-                                  ? 'vc-badge-green'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                                   : isRejected
-                                  ? 'vc-badge-rose'
-                                  : 'vc-badge-amber'
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                               }`}
                             >
                               {st.verificationStatus}
@@ -464,14 +496,14 @@ export const PartnerDashboard: React.FC = () => {
                             {isRejected ? (
                               <button
                                 onClick={() => handleOpenEdit(st, true)}
-                                className="vc-btn py-1 px-3 text-[11px] font-bold bg-rose-600 text-white hover:bg-rose-700 flex items-center gap-1 ml-auto"
+                                className="px-3 py-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-500 text-white rounded-lg flex items-center gap-1 ml-auto shadow-md"
                               >
                                 <RotateCcw className="w-3 h-3" /> Review & Resubmit
                               </button>
                             ) : (
                               <button
                                 onClick={() => handleOpenEdit(st, false)}
-                                className="vc-btn vc-btn-ghost py-1 px-3 text-[11px] font-bold text-sky-600 hover:bg-sky-50"
+                                className="px-3 py-1 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg"
                               >
                                 Edit Details
                               </button>
@@ -481,10 +513,10 @@ export const PartnerDashboard: React.FC = () => {
 
                         {/* Rejection Details Row */}
                         {isRejected && (
-                          <tr className="bg-rose-50/70 border-b border-rose-100">
+                          <tr className="bg-rose-500/10 border-b border-rose-500/20">
                             <td colSpan={6} className="py-2.5 px-4">
-                              <div className="flex items-center gap-2 text-rose-800 text-xs">
-                                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                              <div className="flex items-center gap-2 text-rose-300 text-xs">
+                                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
                                 <div>
                                   <strong className="font-bold">Rejection Reason from Administrator: </strong>
                                   <span>{st.rejectionReason || 'Inadequate physical access or unverified electrical capacity. Please correct location or power rating.'}</span>
@@ -503,21 +535,41 @@ export const PartnerDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* 5. STATION REPORTS TAB */}
+      {/* 5. ADD CHARGING HUB TAB (OR MODAL TRIGGER) */}
+      {activeTab === 'add_hub' && !showAddModal && (
+        <div className="p-8 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 text-center">
+          <Building2 className="w-12 h-12 text-sky-400 mx-auto" />
+          <h2 className="font-heading text-xl font-extrabold text-white">Register a New EV Charging Hub</h2>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Launch the interactive 5-step onboarding wizard to pinpoint your station coordinates on the map, configure chargers, and submit for Administrator verification.
+          </p>
+          <button
+            onClick={() => {
+              setStep(1);
+              setShowAddModal(true);
+            }}
+            className="px-6 py-3 rounded-2xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold shadow-lg"
+          >
+            Launch Add Hub Wizard
+          </button>
+        </div>
+      )}
+
+      {/* 6. STATION REPORTS TAB */}
       {activeTab === 'reports' && (
         <div className="space-y-4">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Driver Issue Reports for Partner Stations</div>
 
           {partnerReports.length === 0 ? (
-            <div className="vc-card p-12 text-center space-y-3 bg-white border border-slate-200">
-              <Flag className="w-10 h-10 text-slate-300 mx-auto" />
-              <div className="font-heading font-extrabold text-base text-navy-900">No Station Reports Filed</div>
-              <p className="text-xs text-slate-500">Driver feedback and maintenance issues filed for your stations will appear here.</p>
+            <div className="p-12 text-center space-y-3 bg-slate-900 border border-slate-800 rounded-3xl">
+              <Flag className="w-10 h-10 text-slate-600 mx-auto" />
+              <div className="font-heading font-extrabold text-base text-white">No Station Reports Filed</div>
+              <p className="text-xs text-slate-400">Driver feedback and maintenance issues filed for your stations will appear here.</p>
             </div>
           ) : (
             <div className="space-y-3">
               {partnerReports.map(report => (
-                <div key={report.id} className="vc-card p-5 bg-white border border-slate-200 space-y-3">
+                <div key={report.id} className="p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
@@ -525,16 +577,16 @@ export const PartnerDashboard: React.FC = () => {
                           {report.reportType.replace('_', ' ')}
                         </span>
                         <span className="text-[10px] text-slate-400">
-                          Status: <strong className="uppercase text-slate-700">{report.status}</strong>
+                          Status: <strong className="uppercase text-slate-300">{report.status}</strong>
                         </span>
                       </div>
-                      <p className="text-xs text-slate-700 mt-1 font-medium">{report.description}</p>
+                      <p className="text-xs text-slate-300 mt-1 font-medium">{report.description}</p>
                     </div>
 
                     {report.status !== 'resolved' && (
                       <button
                         onClick={() => handleUpdateReportStatus(report.id, 'resolved')}
-                        className="vc-btn vc-btn-teal py-1.5 px-3 text-xs font-bold flex items-center gap-1 shrink-0"
+                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1 shrink-0 shadow-md"
                       >
                         <Check className="w-3.5 h-3.5" /> Acknowledge & Resolve
                       </button>
@@ -547,52 +599,52 @@ export const PartnerDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* 6. TELEMETRY FEEDS TAB */}
+      {/* 7. TELEMETRY FEEDS TAB */}
       {activeTab === 'feeds' && (
-        <div className="vc-card p-8 bg-white border border-slate-200 rounded-3xl space-y-4">
+        <div className="p-8 bg-slate-900 border border-slate-800 rounded-3xl space-y-4">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Live Telemetry & WebSockets Gateway</div>
 
-          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+          <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
             <div className="flex items-center justify-between font-bold">
-              <span className="text-navy-900 flex items-center gap-2">
-                <Radio className="w-4 h-4 text-sky-500" /> Operational Feed Gateway
+              <span className="text-white flex items-center gap-2">
+                <Radio className="w-4 h-4 text-sky-400" /> Operational Feed Gateway
               </span>
               <span className="vc-badge vc-badge-sky text-[9px] font-bold">PARTNER PROVIDED</span>
             </div>
-            <p className="text-slate-600">
+            <p className="text-slate-400">
               Live hardware feeds provide verified availability data to VoltMap. All hubs submitted through this portal maintain real-time status synchronization.
             </p>
           </div>
         </div>
       )}
 
-      {/* 7. PROFILE TAB */}
+      {/* 8. PROFILE TAB */}
       {activeTab === 'profile' && (
-        <div className="vc-card p-6 bg-white border border-slate-200 rounded-3xl space-y-6">
+        <div className="p-6 bg-slate-900 border border-slate-800 rounded-3xl space-y-6">
           <div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">CPO Credential Card</span>
-            <h2 className="font-heading text-xl font-extrabold text-navy-900">Partner Organization Details</h2>
+            <h2 className="font-heading text-xl font-extrabold text-white">Partner Organization Details</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-700">
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
-              <span className="text-[10px] text-slate-400 uppercase">Partner UID</span>
-              <div className="font-mono text-xs text-slate-800 font-bold">{user?.uid}</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-300">
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+              <span className="text-[10px] text-slate-500 uppercase">Partner UID</span>
+              <div className="font-mono text-xs text-white font-bold">{user?.uid}</div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
-              <span className="text-[10px] text-slate-400 uppercase">Contact Email</span>
-              <div className="text-slate-800 font-bold">{user?.email}</div>
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+              <span className="text-[10px] text-slate-500 uppercase">Contact Email</span>
+              <div className="text-white font-bold">{user?.email}</div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
-              <span className="text-[10px] text-slate-400 uppercase">Assigned Role</span>
-              <div className="text-sky-600 font-extrabold uppercase tracking-wide">{user?.role}</div>
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+              <span className="text-[10px] text-slate-500 uppercase">Assigned Role</span>
+              <div className="text-sky-400 font-extrabold uppercase tracking-wide">{user?.role}</div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
-              <span className="text-[10px] text-slate-400 uppercase">SLA Level</span>
-              <div className="text-emerald-600 font-extrabold">Enterprise CPO (Tier 1 Verified)</div>
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+              <span className="text-[10px] text-slate-500 uppercase">SLA Level</span>
+              <div className="text-emerald-400 font-extrabold">Enterprise CPO (Tier 1 Verified)</div>
             </div>
           </div>
         </div>
@@ -600,15 +652,23 @@ export const PartnerDashboard: React.FC = () => {
 
       {/* 5-STEP ADD STATION WIZARD MODAL WITH INTEGRATED LOCATION PICKER MAP */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-3xl p-4 sm:p-8 max-w-2xl w-full max-h-[92vh] overflow-y-auto space-y-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-8 max-w-2xl w-full max-h-[92vh] overflow-y-auto space-y-6 shadow-2xl">
             
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
-                <span className="text-[10px] font-bold text-sky-600 uppercase tracking-wider">Step {step} of 5</span>
-                <h3 className="font-heading font-extrabold text-lg text-navy-900">Add Charging Hub</h3>
+                <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">Step {step} of 5</span>
+                <h3 className="font-heading font-extrabold text-lg text-white">Add Charging Hub</h3>
               </div>
-              <button onClick={() => setShowAddModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button
+                onClick={() => {
+                  setShowAddModal(false);
+                  setSubmissionState('IDLE');
+                  setFormError(null);
+                  setFormSuccess(null);
+                }}
+                className="p-1 text-slate-400 hover:text-white"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -617,23 +677,23 @@ export const PartnerDashboard: React.FC = () => {
               {step === 1 && (
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className="text-slate-700">Station Name</label>
+                    <label className="text-slate-300">Station Name</label>
                     <input
                       type="text"
                       value={name}
                       onChange={e => setName(e.target.value)}
                       placeholder="e.g. Financial District EV Charging Hub"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 font-medium focus:outline-none focus:border-sky-500"
                       required
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-slate-700">City Location</label>
+                    <label className="text-slate-300">City Location</label>
                     <input
                       type="text"
                       value={city}
                       onChange={e => setCity(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 font-medium focus:outline-none focus:border-sky-500"
                     />
                   </div>
                 </div>
@@ -642,10 +702,10 @@ export const PartnerDashboard: React.FC = () => {
               {step === 2 && (
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-slate-700 font-bold flex items-center gap-1.5">
-                      <MapPin className="w-4 h-4 text-sky-600" /> Pinpoint Location on Map (Condition 4 & 5 Compliant)
+                    <label className="text-slate-300 font-bold flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-sky-400" /> Pinpoint Location on Map (Duplicate-Protected)
                     </label>
-                    <p className="text-[11px] text-slate-500 font-normal">
+                    <p className="text-[11px] text-slate-400 font-normal">
                       Drag the marker to your precise charging station entrance. The map automatically tests for duplicate hubs within 50 meters and fetches the street address.
                     </p>
                     
@@ -666,36 +726,36 @@ export const PartnerDashboard: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-slate-700">Street Address</label>
+                    <label className="text-slate-300">Street Address</label>
                     <input
                       type="text"
                       value={address}
                       onChange={e => setAddress(e.target.value)}
                       placeholder="e.g. Nanakramguda Financial District"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 font-medium focus:outline-none focus:border-sky-500"
                       required
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-slate-700">Latitude</label>
+                      <label className="text-slate-300">Latitude</label>
                       <input
                         type="number"
                         step="0.000001"
                         value={lat}
                         onChange={e => setLat(Number(e.target.value))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-medium font-mono"
+                        className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium font-mono focus:outline-none focus:border-sky-500"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-slate-700">Longitude</label>
+                      <label className="text-slate-300">Longitude</label>
                       <input
                         type="number"
                         step="0.000001"
                         value={lng}
                         onChange={e => setLng(Number(e.target.value))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-medium font-mono"
+                        className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium font-mono focus:outline-none focus:border-sky-500"
                       />
                     </div>
                   </div>
@@ -706,11 +766,11 @@ export const PartnerDashboard: React.FC = () => {
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-slate-700">Connector Type</label>
+                      <label className="text-slate-300">Connector Type</label>
                       <select
                         value={connectorType}
                         onChange={e => setConnectorType(e.target.value as any)}
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-medium"
+                        className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium focus:outline-none focus:border-sky-500"
                       >
                         <option value="CCS2">CCS2 Fast DC</option>
                         <option value="Type2">Type 2 AC</option>
@@ -719,22 +779,22 @@ export const PartnerDashboard: React.FC = () => {
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-slate-700">Max DC Power (kW)</label>
+                      <label className="text-slate-300">Max DC Power (kW)</label>
                       <input
                         type="number"
                         value={powerKW}
                         onChange={e => setPowerKW(Number(e.target.value))}
-                        className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-medium"
+                        className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium focus:outline-none focus:border-sky-500"
                       />
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-slate-700">Tariff Rate (₹ / kWh)</label>
+                    <label className="text-slate-300">Tariff Rate (₹ / kWh)</label>
                     <input
                       type="number"
                       value={pricePerKWh}
                       onChange={e => setPricePerKWh(Number(e.target.value))}
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 font-medium"
+                      className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium focus:outline-none focus:border-sky-500"
                     />
                   </div>
                 </div>
@@ -743,25 +803,25 @@ export const PartnerDashboard: React.FC = () => {
               {step === 4 && (
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <label className="text-slate-700">Operating Schedule</label>
+                    <label className="text-slate-300">Operating Schedule</label>
                     <input
                       type="text"
                       value={operatingHours}
                       onChange={e => setOperatingHours(e.target.value)}
                       placeholder="e.g. 24/7 Open"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium focus:outline-none focus:border-sky-500"
                     />
                   </div>
                 </div>
               )}
 
               {step === 5 && (
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-                  <div className="font-extrabold text-navy-900">Review Submission</div>
-                  <div>Name: <span className="font-bold text-slate-800">{name}</span></div>
-                  <div>Address: <span className="text-slate-600">{address}, {city}</span></div>
-                  <div>GPS: <span className="font-mono text-slate-600">{lat.toFixed(6)}, {lng.toFixed(6)}</span></div>
-                  <div>Charger: <span className="font-bold text-sky-600">{powerKW} kW {connectorType} (₹{pricePerKWh}/kWh)</span></div>
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+                  <div className="font-extrabold text-white">Review Submission</div>
+                  <div>Name: <span className="font-bold text-slate-200">{name}</span></div>
+                  <div>Address: <span className="text-slate-400">{address}, {city}</span></div>
+                  <div>GPS: <span className="font-mono text-slate-400">{lat.toFixed(6)}, {lng.toFixed(6)}</span></div>
+                  <div>Charger: <span className="font-bold text-sky-400">{powerKW} kW {connectorType} (₹{pricePerKWh}/kWh)</span></div>
                   <span className="vc-badge vc-badge-amber text-[9px] uppercase font-bold block mt-2">
                     STATUS UPON SUBMISSION: PENDING ADMIN VERIFICATION
                   </span>
@@ -769,20 +829,26 @@ export const PartnerDashboard: React.FC = () => {
               )}
 
               {formError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-semibold">
-                  {formError}
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
                 </div>
               )}
 
               {formSuccess && (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
-                  {formSuccess}
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{formSuccess}</span>
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-between pt-3 border-t border-slate-800">
                 {step > 1 ? (
-                  <button type="button" onClick={() => setStep((step - 1) as any)} className="vc-btn vc-btn-ghost text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setStep((step - 1) as any)}
+                    className="px-4 py-2 rounded-xl bg-slate-950 text-slate-300 hover:text-white border border-slate-800 text-xs font-bold"
+                  >
                     Back
                   </button>
                 ) : <div />}
@@ -806,17 +872,27 @@ export const PartnerDashboard: React.FC = () => {
                       }
                       setStep((step + 1) as any);
                     }}
-                    className="vc-btn vc-btn-teal text-xs font-bold flex items-center gap-1"
+                    className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold flex items-center gap-1 shadow-md"
                   >
                     Next <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 ) : (
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="vc-btn vc-btn-teal text-xs font-bold flex items-center gap-1 disabled:opacity-50"
+                    disabled={isSubmitting || submissionState === 'SUBMITTING' || submissionState === 'VALIDATING'}
+                    className="px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 transition-all shadow-md"
                   >
-                    <Send className="w-3.5 h-3.5" /> {isSubmitting ? 'Submitting...' : 'Submit for Admin Verification'}
+                    {isSubmitting || submissionState === 'SUBMITTING' ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                        <span>Submitting to Verification Queue...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Submit for Admin Verification</span>
+                      </>
+                    )}
                   </button>
                 )}
               </div>
@@ -827,123 +903,110 @@ export const PartnerDashboard: React.FC = () => {
 
       {/* EDIT & RESUBMIT STATION MODAL */}
       {editingStation && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-3xl p-4 sm:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
-                <span className="text-[10px] font-bold text-sky-600 uppercase tracking-wider">
+                <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">
                   {isResubmitting ? 'Rejection Correction & Resubmission' : 'CPO Station Configuration'}
                 </span>
-                <h3 className="font-heading font-extrabold text-lg text-navy-900">
+                <h3 className="font-heading font-extrabold text-lg text-white">
                   {isResubmitting ? 'Review & Resubmit Station' : 'Edit Station & Tariff'}
                 </h3>
               </div>
-              <button onClick={() => setEditingStation(null)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button onClick={() => setEditingStation(null)} className="p-1 text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {isResubmitting && editingStation.rejectionReason && (
-              <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 space-y-1">
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 space-y-1">
                 <div className="font-bold flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 text-rose-600" /> Administrator Feedback:
+                  <AlertTriangle className="w-4 h-4 text-rose-400" /> Administrator Feedback:
                 </div>
-                <div className="text-rose-800 font-medium">{editingStation.rejectionReason}</div>
+                <div className="text-rose-200 font-medium">{editingStation.rejectionReason}</div>
               </div>
             )}
 
             <form onSubmit={handleSaveEdit} className="space-y-4 text-xs font-bold">
               <div className="space-y-1">
-                <label className="text-slate-700">Station Name</label>
+                <label className="text-slate-300">Station Name</label>
                 <input
                   type="text"
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium focus:outline-none focus:border-sky-500"
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-700">Street Address</label>
+                <label className="text-slate-300">Street Address</label>
                 <input
                   type="text"
                   value={editAddress}
                   onChange={e => setEditAddress(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium focus:outline-none focus:border-sky-500"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-700">Tariff (₹ / kWh)</label>
+                  <label className="text-slate-300">Tariff (₹/kWh)</label>
                   <input
                     type="number"
-                    step="0.5"
-                    min="1"
-                    max="100"
                     value={editTariff}
                     onChange={e => setEditTariff(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-sky-300 font-bold text-sky-700 focus:ring-2 focus:ring-sky-500"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium focus:outline-none focus:border-sky-500"
                     required
                   />
                 </div>
-
                 <div className="space-y-1">
-                  <label className="text-slate-700">Max Power (kW)</label>
+                  <label className="text-slate-300">Max DC Power (kW)</label>
                   <input
                     type="number"
-                    step="1"
-                    min="7"
-                    max="350"
                     value={editPower}
                     onChange={e => setEditPower(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                    className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium focus:outline-none focus:border-sky-500"
                     required
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-slate-700">Operating Schedule</label>
+                <label className="text-slate-300">Operating Schedule</label>
                 <input
                   type="text"
                   value={editHours}
                   onChange={e => setEditHours(e.target.value)}
-                  placeholder="e.g. 24/7 Open"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-medium"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white font-medium focus:outline-none focus:border-sky-500"
                 />
               </div>
 
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-500 font-normal">
-                {isResubmitting
-                  ? 'Resubmitting this station resets its status to Pending Admin Verification for re-evaluation.'
-                  : 'Updating tariff rate updates live calculation for all drivers routing through this station on VoltTrip.'}
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setEditingStation(null)}
-                  className="vc-btn vc-btn-ghost text-xs"
+                  className="px-4 py-2 rounded-xl bg-slate-950 text-slate-300 hover:text-white border border-slate-800 text-xs font-bold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className={`vc-btn text-xs font-bold flex items-center gap-1.5 ${
-                    isResubmitting ? 'bg-rose-600 text-white hover:bg-rose-700' : 'vc-btn-teal'
+                  disabled={isSubmitting}
+                  className={`px-4 py-2 rounded-xl text-white text-xs font-bold shadow-md flex items-center gap-1 disabled:opacity-50 ${
+                    isResubmitting ? 'bg-rose-600 hover:bg-rose-500' : 'bg-sky-500 hover:bg-sky-400'
                   }`}
                 >
-                  {isResubmitting ? (
+                  {isSubmitting ? (
+                    'Saving...'
+                  ) : isResubmitting ? (
                     <>
-                      <RotateCcw className="w-3.5 h-3.5" /> Submit for Re-Verification
+                      <RotateCcw className="w-3.5 h-3.5" /> Submit Correction
                     </>
                   ) : (
-                    <>
-                      <Check className="w-4 h-4" /> Save Tariff & Details
-                    </>
+                    'Save Configuration'
                   )}
                 </button>
               </div>
