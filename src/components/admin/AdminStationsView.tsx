@@ -56,6 +56,14 @@ export const AdminStationsView: React.FC = () => {
   const [rejectingStation, setRejectingStation] = useState<ChargingStation | null>(null);
   const [rejectionReason, setRejectionReason] = useState('Inaccurate GPS coordinates or incomplete hardware specifications.');
   const [rejectionError, setRejectionError] = useState<string | null>(null);
+  const [approvalError, setApprovalError] = useState<{
+    station: ChargingStation;
+    action: 'approve' | 'reject';
+    message: string;
+    code?: string;
+    docPath: string;
+  } | null>(null);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
 
   // Edit Form Fields
   const [editName, setEditName] = useState('');
@@ -149,11 +157,37 @@ export const AdminStationsView: React.FC = () => {
   // Admin Verification Center Actions
   const handleApproveStation = async (station: ChargingStation) => {
     if (!user) return;
-    await operationsService.reviewStation(station.id, 'approved', user.uid, user.email);
-    chargingDataService.clearCache();
-    fetchStationsData();
-    if (selectedStation?.id === station.id) {
-      setSelectedStation({ ...selectedStation, verificationStatus: 'verified', admin_verified: true, status: 'active' });
+    setIsProcessingAction(true);
+    setApprovalError(null);
+
+    try {
+      await operationsService.reviewStation(station.id, 'approved', user.uid, user.email);
+      chargingDataService.clearCache();
+      fetchStationsData();
+      if (selectedStation?.id === station.id) {
+        setSelectedStation({ ...selectedStation, verificationStatus: 'approved', admin_verified: true, status: 'active' });
+      }
+    } catch (err: any) {
+      console.error('[AdminStationsView] Station Approval Failed:', {
+        stationId: station.id,
+        adminId: user.uid,
+        currentVerificationStatus: station.verificationStatus,
+        targetVerificationStatus: 'approved',
+        firestoreCollection: 'stations',
+        firestoreDocPath: `stations/${station.id}`,
+        firebaseErrorCode: err?.code || 'FIRESTORE_WRITE_REJECTED',
+        firebaseErrorMessage: err?.message || String(err),
+      });
+
+      setApprovalError({
+        station,
+        action: 'approve',
+        message: err?.message || 'Firestore update was rejected. Please verify Admin permissions and network connectivity.',
+        code: err?.code || 'PERMISSION_OR_WRITE_ERROR',
+        docPath: `stations/${station.id}`,
+      });
+    } finally {
+      setIsProcessingAction(false);
     }
   };
 
@@ -169,25 +203,45 @@ export const AdminStationsView: React.FC = () => {
       setRejectionError('Please provide a specific rejection reason (min 5 characters).');
       return;
     }
-    await operationsService.reviewStation(
-      rejectingStation.id,
-      'rejected',
-      user.uid,
-      user.email,
-      rejectionReason.trim()
-    );
-    chargingDataService.clearCache();
-    fetchStationsData();
-    if (selectedStation?.id === rejectingStation.id) {
-      setSelectedStation({
-        ...selectedStation,
-        verificationStatus: 'rejected',
-        rejectionReason: rejectionReason.trim(),
-        admin_verified: false,
+    setIsProcessingAction(true);
+    setRejectionError(null);
+
+    try {
+      await operationsService.reviewStation(
+        rejectingStation.id,
+        'rejected',
+        user.uid,
+        user.email,
+        rejectionReason.trim()
+      );
+      chargingDataService.clearCache();
+      fetchStationsData();
+      if (selectedStation?.id === rejectingStation.id) {
+        setSelectedStation({
+          ...selectedStation,
+          verificationStatus: 'rejected',
+          rejectionReason: rejectionReason.trim(),
+          admin_verified: false,
+        });
+      }
+      setRejectingStation(null);
+      setRejectionReason('');
+    } catch (err: any) {
+      console.error('[AdminStationsView] Station Rejection Failed:', {
+        stationId: rejectingStation.id,
+        adminId: user.uid,
+        currentVerificationStatus: rejectingStation.verificationStatus,
+        targetVerificationStatus: 'rejected',
+        firestoreCollection: 'stations',
+        firestoreDocPath: `stations/${rejectingStation.id}`,
+        firebaseErrorCode: err?.code || 'FIRESTORE_WRITE_REJECTED',
+        firebaseErrorMessage: err?.message || String(err),
       });
+
+      setRejectionError(err?.message || 'Firestore rejection update failed.');
+    } finally {
+      setIsProcessingAction(false);
     }
-    setRejectingStation(null);
-    setRejectionReason('');
   };
 
   const handleVerifyStation = async (station: ChargingStation, verify: boolean) => {
@@ -974,9 +1028,69 @@ export const AdminStationsView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConfirmReject}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md flex items-center gap-1.5"
+                disabled={isProcessingAction}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md flex items-center gap-1.5 disabled:opacity-50"
               >
                 <XCircle className="w-4 h-4" /> Confirm Rejection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VISIBLE ERROR NOTIFICATION MODAL (PART 4 REQUIREMENT) */}
+      {approvalError && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-rose-500/50 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+                <h3 className="font-heading font-extrabold text-white text-base">Approval Failed</h3>
+              </div>
+              <button
+                onClick={() => setApprovalError(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs space-y-1.5">
+              <div className="font-extrabold text-rose-200">Unable to approve station.</div>
+              <p className="text-[11px] leading-relaxed text-slate-300">
+                Firestore update was rejected.
+              </p>
+              <div className="text-[10px] text-rose-400 font-mono bg-slate-950/60 p-2 rounded-xl border border-rose-500/20 break-all">
+                {approvalError.message}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1 text-[11px]">
+              <div className="text-slate-500 font-bold uppercase text-[9px]">Target Document</div>
+              <div className="font-mono text-slate-300 truncate">{approvalError.docPath}</div>
+              <div className="text-slate-400">Station Name: <span className="text-white font-semibold">{approvalError.station.name}</span></div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setApprovalError(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700"
+              >
+                Dismiss
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const st = approvalError.station;
+                  setApprovalError(null);
+                  handleApproveStation(st);
+                }}
+                disabled={isProcessingAction}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Retry
               </button>
             </div>
           </div>

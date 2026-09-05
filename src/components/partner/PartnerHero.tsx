@@ -13,11 +13,12 @@ import {
   Radio,
   FileText,
   SlidersHorizontal,
+  Compass,
 } from 'lucide-react';
 
 interface PartnerHeroProps {
-  activeTab: 'overview' | 'stations' | 'add_hub' | 'reports' | 'feeds' | 'profile';
-  onTabChange: (tab: 'overview' | 'stations' | 'add_hub' | 'reports' | 'feeds' | 'profile') => void;
+  activeTab: 'overview' | 'stations' | 'map' | 'add_hub' | 'reports' | 'feeds' | 'profile';
+  onTabChange: (tab: 'overview' | 'stations' | 'map' | 'add_hub' | 'reports' | 'feeds' | 'profile') => void;
   liveCount: number;
   pendingCount: number;
   needsAttentionCount: number;
@@ -89,6 +90,7 @@ export const PartnerHero: React.FC<PartnerHeroProps> = ({
         {[
           { id: 'overview', label: 'Overview', icon: Building2 },
           { id: 'stations', label: 'Station Fleet', icon: Zap, badge: liveCount + pendingCount + needsAttentionCount },
+          { id: 'map', label: 'Network Map', icon: Compass },
           { id: 'feeds', label: 'Live Telemetry', icon: Radio },
           { id: 'reports', label: 'Driver Reports', icon: FileText },
           { id: 'profile', label: 'CPO Profile', icon: Shield },

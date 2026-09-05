@@ -161,14 +161,11 @@ class OperationsService {
     };
 
     try {
-      const { updateDocumentFields } = await import('./firebase/firestore');
-      const saved = await updateDocumentFields('stations', stationId, {
+      const { updateDocumentFields, deleteField } = await import('./firebase/firestore');
+      await updateDocumentFields('stations', stationId, {
         ...updateData,
-        rejectionReason: null,
+        rejectionReason: deleteField(),
       });
-      if (saved === false) {
-        throw new Error('Firestore update rejected during station resubmission.');
-      }
     } catch (err: any) {
       console.error('[OperationsService] Failed to resubmit station to Firestore:', err);
       throw new Error(err.message || 'Failed to resubmit station.');
@@ -218,34 +215,52 @@ class OperationsService {
     rejectionReason?: string
   ): Promise<boolean> {
     const isApproved = status === 'approved';
-    const updateData: Partial<ChargingStation> = {
-      verificationStatus: isApproved ? 'verified' : 'rejected',
+    const { updateDocumentFields, deleteField } = await import('./firebase/firestore');
+
+    const updateData: Record<string, any> = {
+      verificationStatus: isApproved ? 'approved' : 'rejected',
       reviewedBy: reviewerId,
       reviewedAt: new Date().toISOString(),
       admin_verified: isApproved,
       status: isApproved ? 'active' : 'inactive',
-      rejectionReason: !isApproved ? (rejectionReason || 'Station does not meet verification guidelines') : undefined,
       lastUpdated: new Date().toISOString(),
     };
 
+    if (isApproved) {
+      updateData.rejectionReason = deleteField();
+    } else {
+      updateData.rejectionReason = rejectionReason || 'Station does not meet verification guidelines';
+    }
+
     const st = this.pendingStations.find(s => s.id === stationId);
     if (st) {
-      Object.assign(st, updateData);
+      Object.assign(st, {
+        ...updateData,
+        rejectionReason: isApproved ? undefined : updateData.rejectionReason,
+      });
     }
 
     try {
-      const { updateDocumentFields } = await import('./firebase/firestore');
-      const saved = await updateDocumentFields('stations', stationId, updateData);
-      if (saved === false) {
-        console.warn('[OperationsService] Firestore updateDocumentFields returned false during station review');
-      }
-    } catch (err) {
-      console.warn('[OperationsService] Failed to persist station review to Firestore:', err);
+      await updateDocumentFields('stations', stationId, updateData);
+    } catch (err: any) {
+      console.error('[OperationsService] Station review persistence failed in Firestore:', {
+        stationId,
+        reviewerId,
+        status,
+        updateData,
+        error: err,
+        code: err?.code,
+        message: err?.message,
+      });
+      throw err;
     }
 
     try {
       const { chargingDataService } = await import('./chargingDataService');
-      await chargingDataService.updateStation(stationId, updateData);
+      await chargingDataService.updateStation(stationId, {
+        ...updateData,
+        rejectionReason: isApproved ? undefined : updateData.rejectionReason,
+      });
       chargingDataService.clearCache();
     } catch {
       // safe fallback
@@ -260,7 +275,7 @@ class OperationsService {
       stationId,
       {
         status,
-        rejectionReason: updateData.rejectionReason,
+        rejectionReason: isApproved ? undefined : updateData.rejectionReason,
         stationName: st?.name,
       }
     );

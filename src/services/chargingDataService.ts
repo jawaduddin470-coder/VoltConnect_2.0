@@ -269,11 +269,21 @@ class ChargingDataService {
   }
 
   /**
+   * Dedicated accessor for partner stations (PART 10 & PART 14 requirement).
+   * Strictly returns ONLY the authenticated partner's stations.
+   * Never includes seed stations or other partners' stations.
+   */
+  async getPartnerStations(partnerUid: string): Promise<ChargingStation[]> {
+    return this.getStationsByPartner(partnerUid);
+  }
+
+  /**
    * Fetches stations submitted by a specific partner UID.
+   * Ownership boundary: only returns stations owned by this partner.
    */
   async getStationsByPartner(partnerUid: string): Promise<ChargingStation[]> {
     const all = await this.getAllStationsForAdmin();
-    return all.filter(s => s.createdBy === partnerUid || s.partnerId === partnerUid);
+    return all.filter(s => (s.createdBy === partnerUid || s.partnerId === partnerUid) && s.id !== undefined);
   }
 
   getDataSourceInfo(): { source: 'FIRESTORE' | 'LOCAL_FALLBACK'; count: number } {

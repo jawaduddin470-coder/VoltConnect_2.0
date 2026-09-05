@@ -22,21 +22,36 @@ service cloud.firestore {
     function isSuperAdmin() {
       return isAuthenticated() && (
         (request.auth.token.role == 'super_admin') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'super_admin')
+        (request.auth.token.email != null && request.auth.token.email.matches('(?i)^superadmin.*@voltconnect\\.(io|com)$')) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          getUserData().role in ['super_admin', 'SUPER_ADMIN'] ||
+          getUserData().role.matches('(?i)^super_admin$')
+        ))
       );
     }
 
     function isAdmin() {
       return isAuthenticated() && (
         (request.auth.token.role == 'admin' || request.auth.token.role == 'super_admin') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (getUserData().role == 'admin' || getUserData().role == 'super_admin' || getUserData().role.lower() == 'admin' || getUserData().role.lower() == 'super_admin'))
+        (request.auth.token.email != null && (
+          request.auth.token.email == 'admin@voltconnect.io' ||
+          request.auth.token.email == 'admin2.0@voltconnect.io' ||
+          request.auth.token.email.matches('(?i)^admin.*@voltconnect\\.(io|com)$')
+        )) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          getUserData().role in ['admin', 'super_admin', 'Admin', 'SUPER_ADMIN'] ||
+          getUserData().role.matches('(?i)^(admin|super_admin)$')
+        ))
       );
     }
 
     function isPartner() {
       return isAuthenticated() && (
         (request.auth.token.role == 'partner') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (getUserData().role == 'partner' || getUserData().role.lower() == 'partner')) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          getUserData().role in ['partner', 'Partner', 'PARTNER'] ||
+          getUserData().role.matches('(?i)^partner$')
+        )) ||
         isAdmin()
       );
     }
@@ -44,7 +59,10 @@ service cloud.firestore {
     function isTechnician() {
       return isAuthenticated() && (
         (request.auth.token.role == 'technician') ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (getUserData().role == 'technician' || getUserData().role.lower() == 'technician')) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          getUserData().role in ['technician', 'Technician', 'TECHNICIAN'] ||
+          getUserData().role.matches('(?i)^technician$')
+        )) ||
         isAdmin()
       );
     }
@@ -64,12 +82,12 @@ service cloud.firestore {
       allow read: if true; // Preserves VoltMap station discovery without data loss
       allow create: if isAdmin() || (
         isPartner() &&
-        request.resource.data.createdBy == request.auth.uid &&
+        (request.resource.data.createdBy == request.auth.uid || request.resource.data.partnerId == request.auth.uid) &&
         (request.resource.data.verificationStatus == 'pending' || request.resource.data.verificationStatus == 'draft')
       );
       allow update: if isAdmin() || (
         isPartner() &&
-        resource.data.createdBy == request.auth.uid &&
+        (resource.data.createdBy == request.auth.uid || resource.data.partnerId == request.auth.uid) &&
         (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['admin_verified']) &&
           (

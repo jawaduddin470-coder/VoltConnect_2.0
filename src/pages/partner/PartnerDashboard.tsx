@@ -16,6 +16,7 @@ import { PartnerReportsView } from '@/components/partner/PartnerReportsView';
 import { PartnerProfileView } from '@/components/partner/PartnerProfileView';
 import { PartnerNotificationsModal } from '@/components/partner/PartnerNotificationsModal';
 import { PartnerLocationPickerMap } from '@/components/partner/PartnerLocationPickerMap';
+import { PartnerNetworkMap } from '@/components/partner/PartnerNetworkMap';
 // Partner station submissions default to verificationStatus: 'pending' and require admin approval
 
 import {
@@ -34,11 +35,12 @@ import {
   Layers,
   ChevronRight,
   TrendingUp,
+  Compass,
 } from 'lucide-react';
 
 export const PartnerDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'stations' | 'add_hub' | 'reports' | 'feeds' | 'profile'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'stations' | 'map' | 'add_hub' | 'reports' | 'feeds' | 'profile'>('overview');
 
   // Real Operational Data State
   const [partnerStations, setPartnerStations] = useState<ChargingStation[]>([]);
@@ -311,6 +313,19 @@ export const PartnerDashboard: React.FC = () => {
           </div>
         )}
 
+        {/* TAB: PRIVATE PARTNER-ONLY NETWORK MAP */}
+        {activeTab === 'map' && !selectedStation && (
+          <div className="space-y-6">
+            <PartnerNetworkMap
+              partnerId={user?.uid || ''}
+              stations={partnerStations}
+              onSelectStation={(st) => setSelectedStation(st)}
+              onEditStation={(st, resubmit) => handleOpenEdit(st, resubmit)}
+              onAddStationClick={() => setShowAddModal(true)}
+            />
+          </div>
+        )}
+
         {/* STATION FULL DETAIL VIEW */}
         {selectedStation && (
           <PartnerStationDetailView
@@ -504,42 +519,49 @@ export const PartnerDashboard: React.FC = () => {
       )}
 
       {/* MOBILE BOTTOM NAVIGATION BAR */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 px-2 py-2 flex items-center justify-around text-[10px] font-bold text-slate-400">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 px-1.5 py-2 flex items-center justify-around text-[9px] font-bold text-slate-400">
         <button
           onClick={() => { setActiveTab('overview'); setSelectedStation(null); }}
           className={`flex flex-col items-center gap-1 ${activeTab === 'overview' && !selectedStation ? 'text-emerald-400' : 'hover:text-slate-200'}`}
         >
-          <Building2 className="w-5 h-5" />
+          <Building2 className="w-4 h-4" />
           <span>Overview</span>
         </button>
         <button
           onClick={() => { setActiveTab('stations'); setSelectedStation(null); }}
           className={`flex flex-col items-center gap-1 ${activeTab === 'stations' ? 'text-emerald-400' : 'hover:text-slate-200'}`}
         >
-          <Zap className="w-5 h-5" />
+          <Zap className="w-4 h-4" />
           <span>Fleet</span>
         </button>
         <button
-          onClick={() => setShowAddModal(true)}
-          className="flex flex-col items-center -mt-5"
+          onClick={() => { setActiveTab('map'); setSelectedStation(null); }}
+          className={`flex flex-col items-center gap-1 ${activeTab === 'map' ? 'text-emerald-400' : 'hover:text-slate-200'}`}
         >
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-            <Plus className="w-6 h-6 stroke-[3]" />
+          <Compass className="w-4 h-4" />
+          <span>Map</span>
+        </button>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex flex-col items-center -mt-4"
+        >
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+            <Plus className="w-5 h-5 stroke-[3]" />
           </div>
-          <span className="text-[9px] text-emerald-400 font-extrabold mt-0.5">Add Hub</span>
+          <span className="text-[8px] text-emerald-400 font-extrabold mt-0.5">Add</span>
         </button>
         <button
           onClick={() => { setActiveTab('feeds'); setSelectedStation(null); }}
           className={`flex flex-col items-center gap-1 ${activeTab === 'feeds' ? 'text-emerald-400' : 'hover:text-slate-200'}`}
         >
-          <Radio className="w-5 h-5" />
-          <span>Telemetry</span>
+          <Radio className="w-4 h-4" />
+          <span>Feeds</span>
         </button>
         <button
           onClick={() => { setActiveTab('profile'); setSelectedStation(null); }}
           className={`flex flex-col items-center gap-1 ${activeTab === 'profile' ? 'text-emerald-400' : 'hover:text-slate-200'}`}
         >
-          <Shield className="w-5 h-5" />
+          <Shield className="w-4 h-4" />
           <span>Profile</span>
         </button>
       </nav>

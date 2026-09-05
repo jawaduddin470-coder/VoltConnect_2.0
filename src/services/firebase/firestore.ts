@@ -6,6 +6,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   addDoc,
   query,
   where,
@@ -16,6 +17,21 @@ import {
 } from 'firebase/firestore';
 import { firebaseDb } from './config';
 
+export { deleteField };
+
+/**
+ * Deeply or shallowly cleans object of undefined values to prevent Firestore SDK validation errors.
+ */
+export function cleanUndefinedFields<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleaned[key] = value;
+    }
+  }
+  return cleaned;
+}
+
 /**
  * Adds a new document to a collection with an auto-generated ID.
  */
@@ -25,7 +41,7 @@ export async function addDocument<T extends Record<string, any>>(
 ): Promise<string | null> {
   try {
     const colRef = collection(firebaseDb, collectionName);
-    const docRef = await addDoc(colRef, data);
+    const docRef = await addDoc(colRef, cleanUndefinedFields(data));
     return docRef.id;
   } catch (error) {
     console.error(`[Firestore] Failed to add document to ${collectionName}:`, error);
@@ -79,7 +95,8 @@ export async function setDocument<T extends Record<string, any>>(
 ): Promise<boolean> {
   try {
     const docRef = doc(firebaseDb, collectionName, docId);
-    await setDoc(docRef, data, { merge });
+    const cleaned = cleanUndefinedFields(data);
+    await setDoc(docRef, cleaned, { merge });
     return true;
   } catch (error) {
     console.error(`[Firestore] Failed to set ${collectionName}/${docId}:`, error);
@@ -88,20 +105,29 @@ export async function setDocument<T extends Record<string, any>>(
 }
 
 /**
- * Updates specific fields on an existing document.
+ * Updates specific fields on an existing document with undefined stripping and setDoc merge fallback.
  */
 export async function updateDocumentFields(
   collectionName: string,
   docId: string,
   data: Record<string, any>
 ): Promise<boolean> {
+  const docRef = doc(firebaseDb, collectionName, docId);
+  const cleaned = cleanUndefinedFields(data);
+
   try {
-    const docRef = doc(firebaseDb, collectionName, docId);
-    await updateDoc(docRef, data);
+    await updateDoc(docRef, cleaned);
     return true;
-  } catch (error) {
-    console.error(`[Firestore] Failed to update ${collectionName}/${docId}:`, error);
-    return false;
+  } catch (error: any) {
+    console.warn(`[Firestore] updateDoc failed for ${collectionName}/${docId}, attempting setDoc merge fallback:`, error);
+    // If updateDoc failed because the document does not exist yet, fallback to setDoc with merge: true
+    try {
+      await setDoc(docRef, cleaned, { merge: true });
+      return true;
+    } catch (fallbackError) {
+      console.error(`[Firestore] setDoc fallback also failed for ${collectionName}/${docId}:`, fallbackError);
+      throw fallbackError;
+    }
   }
 }
 
