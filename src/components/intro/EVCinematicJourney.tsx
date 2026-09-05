@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 interface EVCinematicJourneyProps {
-  progress: number; // 0.0 to 1.0 (across 23.5s controlled cinematic timeline)
+  progress: number; // 0.0 to 1.0 (across 12.5s continuous cinematic master timeline)
   activeVehicle?: UserVehicle | null;
   onStartJourney: () => void;
   onEnterApp: () => void;
@@ -33,8 +33,7 @@ export type StoryStage =
   | 'NETWORK'
   | 'CHARGING'
   | 'VOICE_AI'
-  | 'PARTNERS'
-  | 'OPERATIONS'
+  | 'PARTNERS_OPS'
   | 'FINAL';
 
 interface StageTiming {
@@ -43,19 +42,18 @@ interface StageTiming {
   end: number;   // seconds
 }
 
-// Strictly partitioned timeline: Exactly 23.5s total duration (target 22-24s)
-const TOTAL_DURATION_SEC = 23.5;
+// Strictly partitioned 12.5-second master timeline (Target 10-13s, continuous one-shot flow)
+const TOTAL_DURATION_SEC = 12.5;
 
 const STAGES: StageTiming[] = [
-  { id: 'INTRO', start: 0.0, end: 2.0 },
-  { id: 'VEHICLE', start: 2.0, end: 4.5 },
-  { id: 'JOURNEY', start: 4.5, end: 7.0 },
-  { id: 'NETWORK', start: 7.0, end: 9.0 },
-  { id: 'CHARGING', start: 9.0, end: 16.7 },
-  { id: 'VOICE_AI', start: 16.7, end: 18.7 },
-  { id: 'PARTNERS', start: 18.7, end: 20.3 },
-  { id: 'OPERATIONS', start: 20.3, end: 21.9 },
-  { id: 'FINAL', start: 21.9, end: 24.0 },
+  { id: 'INTRO', start: 0.0, end: 1.5 },
+  { id: 'VEHICLE', start: 1.5, end: 3.0 },
+  { id: 'JOURNEY', start: 3.0, end: 4.5 },
+  { id: 'NETWORK', start: 4.5, end: 5.8 },
+  { id: 'CHARGING', start: 5.8, end: 10.5 },
+  { id: 'VOICE_AI', start: 10.5, end: 11.5 },
+  { id: 'PARTNERS_OPS', start: 11.5, end: 12.2 },
+  { id: 'FINAL', start: 12.2, end: 13.0 },
 ];
 
 export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
@@ -79,30 +77,30 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
   // Determine current active story stage (strictly ONE active stage at any millisecond)
   const activeStageObj =
     STAGES.find((s) => currentTime >= s.start && currentTime < s.end) ||
-    (currentTime >= 21.9 ? STAGES[8] : STAGES[0]);
+    (currentTime >= 12.2 ? STAGES[7] : STAGES[0]);
   const activeStage = activeStageObj.id;
 
-  // Single card lifecycle: 280ms enter, stable hold, 200ms exit (ABSOLUTELY ZERO OVERLAP)
+  // Single card lifecycle: 160ms enter, stable hold, 120ms exit (ABSOLUTELY ZERO OVERLAP)
   const tau = currentTime - activeStageObj.start;
   const stageDuration = activeStageObj.end - activeStageObj.start;
   let cardOpacity = 1;
   let cardTranslateY = 0;
 
   if (activeStage === 'FINAL') {
-    const r = Math.min(1, Math.max(0, tau / 0.35));
+    const r = Math.min(1, Math.max(0, tau / 0.25));
     cardOpacity = r;
     cardTranslateY = (1 - r) * 10;
   } else {
-    if (tau < 0.28) {
-      // Clean 280ms entrance
-      const r = tau / 0.28;
+    if (tau < 0.16) {
+      // Clean 160ms entrance
+      const r = tau / 0.16;
       cardOpacity = Math.max(0, Math.min(1, r));
-      cardTranslateY = (1 - r) * 10;
-    } else if (tau > stageDuration - 0.20) {
-      // Clean 200ms exit
-      const r = (stageDuration - tau) / 0.20;
+      cardTranslateY = (1 - r) * 8;
+    } else if (tau > stageDuration - 0.12) {
+      // Clean 120ms exit
+      const r = (stageDuration - tau) / 0.12;
       cardOpacity = Math.max(0, Math.min(1, r));
-      cardTranslateY = -(1 - r) * 8;
+      cardTranslateY = -(1 - r) * 6;
     } else {
       // Completely stable hold
       cardOpacity = 1;
@@ -111,113 +109,94 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
   }
 
   // =========================================================================
-  // VEHICLE MOVEMENT: Slow, smooth, physically grounded across the 23.5s story
+  // VEHICLE MOVEMENT: Slow, smooth, continuous camera anchor across 12.5s
   // =========================================================================
-  let carXvw = -18;
+  let carXvw = -15;
   let isBraking = false;
   let isCarStopped = false;
   let isDeparting = false;
-  let roadAnim = 'none';
-  let wheelAnim = 'none';
+  let roadAnim = 'roadDashAnim 1.0s linear infinite';
+  let wheelAnim = 'wheelSpin 0.8s linear infinite';
 
-  if (currentTime < 2.0) {
-    // 01 INTRO: Resting offscreen
-    carXvw = -18;
-    roadAnim = 'none';
-    wheelAnim = 'none';
-  } else if (currentTime < 4.5) {
-    // 02 VEHICLE: Enters smoothly onto highway (cubic-bezier ease-out, calm driving speed)
-    const u = (currentTime - 2.0) / 2.5;
+  if (currentTime < 1.5) {
+    // 01 INTRO: Enters smoothly onto highway
+    const u = currentTime / 1.5;
     const ease = 1 - Math.pow(1 - u, 3);
-    carXvw = -18 + ease * 34; // -18vw -> 16vw
-    roadAnim = 'roadDashAnim 1.0s linear infinite';
-    wheelAnim = 'wheelSpin 0.8s linear infinite';
-  } else if (currentTime < 7.0) {
-    // 03 JOURNEY: Cruising steadily along highway corridor
-    const u = (currentTime - 4.5) / 2.5;
-    carXvw = 16 + u * 16; // 16vw -> 32vw
-    roadAnim = 'roadDashAnim 1.0s linear infinite';
-    wheelAnim = 'wheelSpin 0.8s linear infinite';
-  } else if (currentTime < 9.0) {
-    // 04 NETWORK: Cruising steadily as charging network appears
-    const u = (currentTime - 7.0) / 2.0;
-    carXvw = 32 + u * 16; // 32vw -> 48vw
-    roadAnim = 'roadDashAnim 1.0s linear infinite';
-    wheelAnim = 'wheelSpin 0.8s linear infinite';
-  } else if (currentTime < 10.0) {
-    // 05 CHARGING: Approach charger, decelerate smoothly (velocity -> 0)
+    carXvw = -15 + ease * 27; // -15vw -> 12vw
+  } else if (currentTime < 3.0) {
+    // 02 VEHICLE: Smoothly continues cruising
+    const u = (currentTime - 1.5) / 1.5;
+    carXvw = 12 + u * 15; // 12vw -> 27vw
+  } else if (currentTime < 4.5) {
+    // 03 JOURNEY: Smoothly cruises along highway corridor
+    const u = (currentTime - 3.0) / 1.5;
+    carXvw = 27 + u * 14; // 27vw -> 41vw
+  } else if (currentTime < 5.8) {
+    // 04 NETWORK: Approaches charging zone
+    const u = (currentTime - 4.5) / 1.3;
+    carXvw = 41 + u * 13; // 41vw -> 54vw
+  } else if (currentTime < 6.6) {
+    // 05 CHARGING: Smooth deceleration curve into charging bay (velocity -> 0)
     isBraking = true;
-    const u = (currentTime - 9.0) / 1.7;
+    const u = (currentTime - 5.8) / 0.8;
     const ease = 1 - Math.pow(1 - u, 2.2);
-    carXvw = 48 + ease * 17; // 48vw -> 65vw
-    roadAnim = 'roadDashAnim 2.0s linear infinite'; // Visibly slowing down
-    wheelAnim = 'wheelSpin 1.8s linear infinite';
-  } else if (currentTime < 16.3) {
-    // 05 CHARGING: Complete stop at charging pedestal during 80% -> 100% -> READY
+    carXvw = 54 + ease * 11; // 54vw -> 65vw
+    roadAnim = 'roadDashAnim 2.2s linear infinite'; // Visibly slowing down
+    wheelAnim = 'wheelSpin 2.0s linear infinite';
+  } else if (currentTime < 10.5) {
+    // 05 CHARGING: Complete physical stop at charging pedestal
     carXvw = 65;
     isCarStopped = true;
     roadAnim = 'none'; // Completely stationary
     wheelAnim = 'none';
-  } else if (currentTime < 16.7) {
-    // 05 CHARGING: Smooth acceleration departure (0.4s)
+  } else if (currentTime < 11.2) {
+    // 05 CHARGING: Smooth departure acceleration
     isDeparting = true;
-    const u = (currentTime - 16.3) / 0.4;
+    const u = (currentTime - 10.5) / 0.7;
     carXvw = 65 + Math.pow(u, 2) * 12; // 65vw -> 77vw
-    roadAnim = 'roadDashAnim 1.2s linear infinite';
-    wheelAnim = 'wheelSpin 1.0s linear infinite';
+    roadAnim = 'roadDashAnim 1.3s linear infinite';
+    wheelAnim = 'wheelSpin 1.1s linear infinite';
   } else {
-    // 06-09: Anchored in view on right side of the highway with headlights illuminating the scene
+    // 06-08: Anchored in view on right side of highway
     carXvw = 77;
     roadAnim = 'roadDashAnim 1.0s linear infinite';
     wheelAnim = 'wheelSpin 0.8s linear infinite';
   }
 
   // Pure hardware state flags
-  const isMoving = (currentTime >= 2.0 && currentTime < 10.0) || currentTime >= 16.3;
-  const isChargingConnected = currentTime >= 10.7 && currentTime < 16.3;
+  const isMoving = (currentTime < 6.6) || currentTime >= 10.5;
+  const isChargingConnected = currentTime >= 6.8 && currentTime < 10.5;
 
   // =========================================================================
-  // ⚡ 05 CHARGING WOW MOMENT: Distinct 80% -> 84% -> 88% -> 92% -> 96% -> 100%
+  // ⚡ 05 CHARGING WOW MOMENT (5.8s – 10.5s | 4.7 full seconds)
+  // 80% -> 84% -> 88% -> 92% -> 96% -> 100% -> HOLD -> READY
   // =========================================================================
   let liveSOC = 80;
-  let chargingPhase: 'APPROACH' | 'STOP' | 'CONNECT' | '80_84' | '84_88' | '88_92' | '92_96' | '96_100' | 'HOLD_100' | 'READY' | 'DEPART' = 'APPROACH';
+  let chargingPhase: 'APPROACH' | 'STOP' | 'CONNECT' | 'CHARGING' | 'HOLD_100' | 'READY' | 'DEPART' = 'APPROACH';
 
-  if (currentTime < 9.0) {
+  if (currentTime < 5.8) {
     liveSOC = 80;
     chargingPhase = 'APPROACH';
-  } else if (currentTime < 10.0) {
+  } else if (currentTime < 6.6) {
     chargingPhase = 'APPROACH';
     liveSOC = 80;
-  } else if (currentTime < 10.7) {
+  } else if (currentTime < 6.8) {
     chargingPhase = 'STOP';
     liveSOC = 80;
-  } else if (currentTime < 11.2) {
+  } else if (currentTime < 7.1) {
     chargingPhase = 'CONNECT';
     liveSOC = 80;
-  } else if (currentTime < 12.0) {
-    chargingPhase = '80_84';
-    const u = (currentTime - 11.2) / 0.8;
-    liveSOC = Math.min(84, Math.round(80 + u * 4));
-  } else if (currentTime < 12.8) {
-    chargingPhase = '84_88';
-    const u = (currentTime - 12.0) / 0.8;
-    liveSOC = Math.min(88, Math.round(84 + u * 4));
-  } else if (currentTime < 13.6) {
-    chargingPhase = '88_92';
-    const u = (currentTime - 12.8) / 0.8;
-    liveSOC = Math.min(92, Math.round(88 + u * 4));
-  } else if (currentTime < 14.4) {
-    chargingPhase = '92_96';
-    const u = (currentTime - 13.6) / 0.8;
-    liveSOC = Math.min(96, Math.round(92 + u * 4));
-  } else if (currentTime < 15.3) {
-    chargingPhase = '96_100';
-    const u = (currentTime - 14.4) / 0.9;
-    liveSOC = Math.min(100, Math.round(96 + u * 4));
-  } else if (currentTime < 15.9) {
+  } else if (currentTime < 9.6) {
+    // 2.5s visible charging progression (0.5s per step: 80->84->88->92->96->100)
+    chargingPhase = 'CHARGING';
+    const u = (currentTime - 7.1) / 2.5;
+    liveSOC = Math.min(100, Math.round(80 + u * 20));
+  } else if (currentTime < 10.0) {
+    // 100% Hold (400ms)
     chargingPhase = 'HOLD_100';
     liveSOC = 100;
-  } else if (currentTime < 16.3) {
+  } else if (currentTime < 10.5) {
+    // READY State (500ms)
     chargingPhase = 'READY';
     liveSOC = 100;
   } else {
@@ -225,8 +204,8 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
     liveSOC = 100;
   }
 
-  const isChargingActive = currentTime >= 11.2 && currentTime < 15.3;
-  const isChargeComplete = currentTime >= 15.3;
+  const isChargingActive = currentTime >= 7.1 && currentTime < 9.6;
+  const isChargeComplete = currentTime >= 9.6;
 
   // Pedestal Digital Status Display Strings
   const pedestalText1 = isChargeComplete
@@ -262,7 +241,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
   return (
     <div className="absolute inset-0 w-full h-full bg-[#030712] overflow-hidden select-none font-sans">
       
-      {/* 1. ATMOSPHERIC DUSK ENVIRONMENT */}
+      {/* 1. ATMOSPHERIC DUSK ENVIRONMENT (Continuous camera background — never disappears) */}
       <div className="relative w-full h-full">
         {/* Subtle Ambient Night Sky */}
         <div className="absolute inset-0 pointer-events-none">
@@ -345,7 +324,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
             </defs>
           </svg>
 
-          {/* Heavy-Duty DC Charging Cable (Connects at 10.7s, detaches at 16.3s) */}
+          {/* Heavy-Duty DC Charging Cable (Connects at 6.8s, detaches at 10.5s) */}
           {isChargingConnected && (
             <svg className="absolute top-[88px] right-[54px] w-40 h-14 overflow-visible pointer-events-none z-20">
               <path d="M 140 10 Q 70 38, 0 12" fill="none" stroke="#1E293B" strokeWidth="6" strokeLinecap="round" />
@@ -453,14 +432,15 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
         {/* ================================================================= */}
         {activeStage !== 'FINAL' && (
           <div
-            className="absolute top-[12%] sm:top-[15%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto"
+            key={activeStage}
+            className="absolute top-[12%] sm:top-[15%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto pointer-events-none"
             style={{
               opacity: cardOpacity,
               transform: `translate3d(0, ${cardTranslateY.toFixed(1)}px, 0)`,
-              transition: 'opacity 0.15s ease-out, transform 0.15s ease-out',
+              transition: 'opacity 0.12s ease-out, transform 0.12s ease-out',
             }}
           >
-            {/* 01 — INTRO (0.0s – 2.0s) */}
+            {/* 01 — INTRO (0.0s – 1.5s) */}
             {activeStage === 'INTRO' && (
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-sky-500/30 text-sky-400 text-xs font-mono font-bold tracking-widest uppercase shadow-md">
@@ -478,7 +458,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
               </div>
             )}
 
-            {/* 02 — VEHICLE (2.0s – 4.5s) */}
+            {/* 02 — VEHICLE (1.5s – 3.0s) */}
             {activeStage === 'VEHICLE' && (
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-sky-500/40 text-xs font-mono font-bold text-sky-400 shadow-md">
@@ -523,7 +503,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
               </div>
             )}
 
-            {/* 03 — JOURNEY (4.5s – 7.0s) */}
+            {/* 03 — JOURNEY (3.0s – 4.5s) */}
             {activeStage === 'JOURNEY' && (
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-teal-500/40 text-xs font-mono font-bold text-teal-300 shadow-md">
@@ -564,7 +544,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
               </div>
             )}
 
-            {/* 04 — NETWORK (7.0s – 9.0s) */}
+            {/* 04 — NETWORK (4.5s – 5.8s) */}
             {activeStage === 'NETWORK' && (
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-sky-500/40 text-xs font-mono font-bold text-sky-400 shadow-md">
@@ -606,7 +586,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
               </div>
             )}
 
-            {/* ⚡ 05 — CHARGING WOW MOMENT (9.0s – 16.7s, ~7.5s) */}
+            {/* ⚡ 05 — CHARGING WOW MOMENT (5.8s – 10.5s | 4.7s) */}
             {activeStage === 'CHARGING' && (
               <div className="space-y-3">
                 {/* Status Pill Badge */}
@@ -708,7 +688,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
               </div>
             )}
 
-            {/* 06 — VOICE AI (16.7s – 18.7s) */}
+            {/* 06 — VOICE AI (10.5s – 11.5s) */}
             {activeStage === 'VOICE_AI' && (
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-mono font-bold uppercase tracking-wider shadow-md">
@@ -719,7 +699,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
                   Your assistant. Always ready.
                 </h2>
                 {/* Seamless Voice AI Utterance Dialog */}
-                <div className="bg-slate-950/95 border border-purple-500/30 p-4 rounded-2xl shadow-xl space-y-3">
+                <div className="bg-slate-950/95 border border-purple-500/30 p-4 rounded-2xl shadow-xl space-y-3 max-w-lg mx-auto">
                   <div className="flex items-center justify-between gap-3 text-left">
                     <div className="flex items-center gap-2.5 max-w-[48%]">
                       <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
@@ -739,70 +719,32 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
               </div>
             )}
 
-            {/* 07 — PARTNERS (18.7s – 20.3s) */}
-            {activeStage === 'PARTNERS' && (
+            {/* 07 — COMBINED: PARTNERS + OPERATIONS (11.5s – 12.2s) */}
+            {activeStage === 'PARTNERS_OPS' && (
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 shadow-md">
                   <Building2 className="w-3.5 h-3.5" />
-                  <span>CPO PARTNER ECOSYSTEM</span>
+                  <span>PARTNERS + OPERATIONS = RELIABLE ECOSYSTEM</span>
                 </div>
-                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-                  Partners power the network.
-                </h2>
-                <div className="bg-slate-950/95 border border-emerald-500/30 p-4 rounded-2xl shadow-lg space-y-2 max-w-md mx-auto text-left">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <Building2 className="w-3.5 h-3.5 text-emerald-400" /> Partner CPO Command
-                    </span>
-                    <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                      LIVE SYNC
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-center">
-                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Verified Hubs</div>
-                      <div className="text-xs font-extrabold text-emerald-400 font-mono">8 Live</div>
-                    </div>
-                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Total Power</div>
-                      <div className="text-xs font-extrabold text-sky-400 font-mono">1,420 kW</div>
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-slate-400 text-center">CPOs register stations, set tariffs, and monitor telemetry.</div>
+                <div className="space-y-1">
+                  <h2 className="font-heading text-xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    Partners power the network.
+                  </h2>
+                  <p className="text-sm sm:text-base text-cyan-300 font-bold">
+                    Operations keep it moving.
+                  </p>
                 </div>
-              </div>
-            )}
-
-            {/* 08 — OPERATIONS (20.3s – 21.9s) */}
-            {activeStage === 'OPERATIONS' && (
-              <div className="space-y-3">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-sky-500/40 text-xs font-mono font-bold text-sky-400 shadow-md">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>ADMIN COMMAND CENTER</span>
-                </div>
-                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-                  Operations keep it moving.
-                </h2>
-                <div className="bg-slate-950/95 border border-sky-500/30 p-4 rounded-2xl shadow-lg space-y-2 max-w-md mx-auto text-left">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-sky-400" /> Central Operations
-                    </span>
-                    <span className="text-[9px] font-mono font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-md">
-                      GOVERNANCE
-                    </span>
+                <div className="grid grid-cols-2 gap-2.5 max-w-md mx-auto text-left pt-0.5">
+                  <div className="p-2.5 rounded-xl bg-slate-950/95 border border-emerald-500/30 text-center space-y-1">
+                    <div className="text-[9px] font-mono text-emerald-400 font-bold uppercase">CPO Partners</div>
+                    <div className="text-xs sm:text-sm font-extrabold text-white font-mono">8 Live Hubs</div>
+                    <div className="text-[9px] text-slate-400">1,420 kW Live Power</div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-center">
-                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Stations</div>
-                      <div className="text-xs font-extrabold text-sky-400 font-mono">1,766 Active</div>
-                    </div>
-                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Uptime</div>
-                      <div className="text-xs font-extrabold text-teal-400 font-mono">99.9% Health</div>
-                    </div>
+                  <div className="p-2.5 rounded-xl bg-slate-950/95 border border-sky-500/30 text-center space-y-1">
+                    <div className="text-[9px] font-mono text-sky-400 font-bold uppercase">Operations</div>
+                    <div className="text-xs sm:text-sm font-extrabold text-white font-mono">1,766 Stations</div>
+                    <div className="text-[9px] text-slate-400">99.9% Health Uptime</div>
                   </div>
-                  <div className="text-[11px] text-slate-400 text-center">Central operations, verification, and network audit logs.</div>
                 </div>
               </div>
             )}
@@ -810,7 +752,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
         )}
 
         {/* ================================================================= */}
-        {/* 6. FINAL CLIMAX ECOSYSTEM REVEAL (21.9s – 24.0s+) */}
+        {/* 6. FINAL CLIMAX ECOSYSTEM REVEAL (12.2s – 13.0s+) */}
         {/* ================================================================= */}
         {activeStage === 'FINAL' && (
           <div
