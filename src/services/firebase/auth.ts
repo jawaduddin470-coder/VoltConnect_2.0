@@ -29,12 +29,12 @@ export function getAuthErrorMessage(error: any): string {
     return `Domain Not Authorized in Firebase: "${domain}" has not been added to your Firebase Authorized Domains. In Firebase Console, navigate to Authentication -> Settings -> Authorized domains and click "Add domain" for "${domain}".`;
   }
 
+  const isSafari = typeof navigator !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
   if (
-    message.includes('Illegal url for new iframe') ||
     message.includes('storage-partitioned') ||
-    message.includes('missing initial state')
+    (message.includes('missing initial state') && isSafari)
   ) {
-    return 'Safari Cross-Site Tracking Restriction: Apple Safari blocked the Google Sign-In popup storage. Please sign in using your Email & Password below, or disable "Prevent Cross-Site Tracking" in Safari Preferences > Privacy, or use Chrome/Firefox.';
+    return 'Safari Tracking Restriction: Apple Safari blocked the Google Sign-In popup storage. Please sign in using your Email & Password below, or disable "Prevent Cross-Site Tracking" in Safari Settings > Privacy, or use Chrome.';
   }
 
   if (

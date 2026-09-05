@@ -2,17 +2,9 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Handle Firebase Auth domain resolution:
-// On localhost or when explicitly configured, use the canonical firebaseapp domain.
-// Only use window.location.hostname in production browser environments when reverse-proxied.
-const isBrowser = typeof window !== 'undefined';
-const isLocalhost = isBrowser && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-const targetAuthDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 
-  (isLocalhost ? 'voltconnect-30c9b.firebaseapp.com' : (isBrowser && window.location.hostname ? window.location.hostname : 'voltconnect-30c9b.firebaseapp.com'));
-
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyCAzSbzrxt-kA7YSWLg-qaaT8v8dix_NKE',
-  authDomain: targetAuthDomain,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'voltconnect-30c9b.firebaseapp.com',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'voltconnect-30c9b',
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'voltconnect-30c9b.firebasestorage.app',
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '519731202341',
