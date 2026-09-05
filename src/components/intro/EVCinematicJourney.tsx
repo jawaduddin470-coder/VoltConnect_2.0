@@ -20,38 +20,44 @@ import {
 } from 'lucide-react';
 
 interface EVCinematicJourneyProps {
-  progress: number; // 0.0 to 1.0 (across 8.0s total timeline)
+  progress: number; // 0.0 to 1.0 (across 33.0s unhurried cinematic timeline)
   activeVehicle?: UserVehicle | null;
   onStartJourney: () => void;
   onEnterApp: () => void;
 }
 
-// GPU-accelerated smooth overlapping transition helper (cubic-bezier easing)
+// GPU-accelerated smooth overlapping transition helper (cubic-bezier easing with subtle scale & translate)
 function getStageStyle(
   progress: number,
   startP: number,
   endP: number,
-  fadeP = 0.025
+  fadeInP = 0.025,
+  fadeOutP = 0.025
 ): React.CSSProperties {
-  if (progress < startP - fadeP || progress > endP + fadeP) {
+  if (progress < startP - fadeInP || progress > endP + fadeOutP) {
     return { display: 'none', opacity: 0, pointerEvents: 'none' };
   }
   let opacity = 1;
   let translateY = 0;
+  let scale = 1;
+
   if (progress < startP) {
-    const r = (progress - (startP - fadeP)) / fadeP;
+    const r = (progress - (startP - fadeInP)) / fadeInP;
     opacity = Math.max(0, Math.min(1, r));
-    translateY = (1 - r) * 8;
+    translateY = (1 - r) * 10;
+    scale = 0.97 + r * 0.03;
   } else if (progress > endP) {
-    const r = (progress - endP) / fadeP;
+    const r = (progress - endP) / fadeOutP;
     opacity = Math.max(0, Math.min(1, 1 - r));
-    translateY = -r * 6;
+    translateY = -r * 8;
+    scale = 1 - r * 0.02;
   }
+
   return {
     opacity,
-    transform: `translate3d(0, ${translateY.toFixed(1)}px, 0)`,
-    transition: 'opacity 0.15s cubic-bezier(0.22, 1, 0.36, 1), transform 0.15s cubic-bezier(0.22, 1, 0.36, 1)',
-    pointerEvents: opacity > 0.8 ? 'auto' : 'none',
+    transform: `translate3d(0, ${translateY.toFixed(1)}px, 0) scale(${scale.toFixed(3)})`,
+    transition: 'opacity 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
+    pointerEvents: opacity > 0.75 ? 'auto' : 'none',
   };
 }
 
@@ -65,62 +71,138 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
   const vehicleName = activeVehicle
     ? `${activeVehicle.manufacturer} ${activeVehicle.model}`
     : 'Tata Nexon EV Long Range';
-  const batterySOC = activeVehicle?.currentBatteryPercent ?? 85;
+  const batterySOC = activeVehicle?.currentBatteryPercent ?? 80;
   const rangeKm = activeVehicle?.estimatedRangeKm ?? 345;
   const maxDCPower = activeVehicle?.dcMaxPowerKW ?? 60;
   const connectorType = activeVehicle?.connectorTypes?.[0] || 'CCS2';
 
   // =========================================================================
-  // CONTINUOUS 6-STAGE CINEMATIC TIMELINE (0.0 to 1.0 across 8.0 seconds)
-  // Stage 1 (0.0s - 1.0s | p: 0.00 - 0.125): OPENING ("One ecosystem. Every connection.")
-  // Stage 2 (1.0s - 2.0s | p: 0.125 - 0.25): VEHICLE ("Your vehicle. Connected.")
-  // Stage 3 (2.0s - 3.2s | p: 0.25 - 0.40): JOURNEY + NETWORK ("Your journey & network. Intelligent.")
-  // Stage 4 (3.2s - 4.4s | p: 0.40 - 0.55): CHARGING + VOICE AI ("Your charge & assistant. Optimized.")
-  // Stage 5 (4.4s - 5.5s | p: 0.55 - 0.69): PARTNERS + OPERATIONS ("Partners & operations. Powered.")
-  // Stage 6 (5.5s - 8.0s | p: 0.69 - 1.00): FINAL ECOSYSTEM ("One ecosystem. Built for electric mobility.")
+  // CONTINUOUS 9-STAGE STORYLINE TIMELINE (0.0 to 1.0 across 33.0 seconds)
+  // Stage 1 (0.0s - 3.0s | p: 0.000 - 0.091): INTRO ("One ecosystem. Every connection.")
+  // Stage 2 (3.0s - 6.5s | p: 0.091 - 0.197): VEHICLE ("Your vehicle. Connected.")
+  // Stage 3 (6.0s - 9.5s | p: 0.180 - 0.288): JOURNEY ("Your journey. Intelligent.")
+  // Stage 4 (9.0s - 12.0s | p: 0.270 - 0.364): NETWORK ("Your network. Visible.")
+  // Stage 5 (11.5s - 23.5s | p: 0.348 - 0.712): ⚡ CHARGING HERO MOMENT (12.0s duration!)
+  //   11.5s - 14.0s (p: 0.348 - 0.424): Approach & Smooth Deceleration (2.5s)
+  //   14.0s - 15.0s (p: 0.424 - 0.455): Complete Stop at Pedestal (1.0s)
+  //   15.0s - 16.0s (p: 0.455 - 0.485): Charger Cable Connects (1.0s)
+  //   16.0s - 21.0s (p: 0.485 - 0.636): 80% -> 100% Charging Animation (5.0s)
+  //   21.0s - 22.5s (p: 0.636 - 0.682): 100% Completion Hold (1.5s)
+  //   22.5s - 23.5s (p: 0.682 - 0.712): Departure & Smooth Acceleration (1.0s)
+  // Stage 6 (23.5s - 26.5s | p: 0.695 - 0.788): VOICE AI ("Your assistant. Always ready.")
+  // Stage 7 (26.0s - 28.5s | p: 0.770 - 0.860): PARTNERS ("Partners power the network.")
+  // Stage 8 (28.0s - 30.5s | p: 0.835 - 0.920): OPERATIONS ("Operations keep it moving.")
+  // Stage 9 (30.0s - 33.0s | p: 0.895 - 1.000): FINAL ECOSYSTEM ("One ecosystem. Built for electric mobility.")
   // =========================================================================
 
   // Continuous Vehicle X-Position Motion Curve (translate3d in vw units for GPU acceleration)
-  let carXvw = -15;
+  let carXvw = -18;
   let isBraking = false;
+  let isCarStopped = false;
+  let isDeparting = false;
+  let roadAnim = 'none';
+  let wheelAnim = 'none';
 
-  if (progress < 0.10) {
-    // Stage 1: Resting offscreen
-    carXvw = -15;
-  } else if (progress < 0.25) {
-    // Stage 2: Enters smoothly onto highway
-    const pNorm = (progress - 0.10) / (0.25 - 0.10);
-    const easeOut = 1 - Math.pow(1 - pNorm, 3);
-    carXvw = -15 + easeOut * 37; // -15vw -> 22vw
-  } else if (progress < 0.40) {
-    // Stage 3: Cruises along highway during journey & network reveal
-    const pNorm = (progress - 0.25) / (0.40 - 0.25);
-    carXvw = 22 + pNorm * 26; // 22vw -> 48vw
-  } else if (progress < 0.50) {
-    // Stage 4 early: Deceleration into charging bay
+  if (progress < 0.080) {
+    // Stage 1: Resting offscreen during calm intro
+    carXvw = -18;
+    roadAnim = 'none';
+    wheelAnim = 'none';
+  } else if (progress < 0.197) {
+    // Stage 2: Enters smoothly onto highway (relaxed driving speed, not running)
+    const pNorm = (progress - 0.080) / (0.197 - 0.080);
+    const easeOut = 1 - Math.pow(1 - pNorm, 2.5);
+    carXvw = -18 + easeOut * 34; // -18vw -> 16vw
+    roadAnim = 'roadDashAnim 0.85s linear infinite';
+    wheelAnim = 'wheelSpin 0.7s linear infinite';
+  } else if (progress < 0.288) {
+    // Stage 3: Cruising along highway during journey reveal
+    const pNorm = (progress - 0.197) / (0.288 - 0.197);
+    carXvw = 16 + pNorm * 15; // 16vw -> 31vw
+    roadAnim = 'roadDashAnim 0.85s linear infinite';
+    wheelAnim = 'wheelSpin 0.7s linear infinite';
+  } else if (progress < 0.348) {
+    // Stage 4: Cruising along highway as charging network appears
+    const pNorm = (progress - 0.288) / (0.348 - 0.288);
+    carXvw = 31 + pNorm * 14; // 31vw -> 45vw
+    roadAnim = 'roadDashAnim 0.85s linear infinite';
+    wheelAnim = 'wheelSpin 0.7s linear infinite';
+  } else if (progress < 0.424) {
+    // Stage 5 Approach: Vehicle decelerates smoothly into the charging bay (velocity -> 0)
     isBraking = true;
-    const pNorm = (progress - 0.40) / (0.50 - 0.40);
-    const easeOut = 1 - Math.pow(1 - pNorm, 2);
-    carXvw = 48 + easeOut * 24; // 48vw -> 72vw (settles at charging pedestal)
+    const pNorm = (progress - 0.348) / (0.424 - 0.348);
+    const easeOut = 1 - Math.pow(1 - pNorm, 2.2);
+    carXvw = 45 + easeOut * 20; // 45vw -> 65vw
+    roadAnim = 'roadDashAnim 1.8s linear infinite'; // Visibly slowing down
+    wheelAnim = 'wheelSpin 1.5s linear infinite';
+  } else if (progress < 0.682) {
+    // Stage 5 Stopped: Vehicle comes to a complete stop at charging pedestal
+    carXvw = 65;
+    isCarStopped = true;
+    roadAnim = 'none'; // Completely stationary
+    wheelAnim = 'none';
+  } else if (progress < 0.720) {
+    // Stage 5 Departure: Cable disconnects, smooth acceleration departure
+    isDeparting = true;
+    const pNorm = (progress - 0.682) / (0.720 - 0.682);
+    const easeIn = Math.pow(pNorm, 2);
+    carXvw = 65 + easeIn * 12; // 65vw -> 77vw
+    roadAnim = 'roadDashAnim 1.2s linear infinite';
+    wheelAnim = 'wheelSpin 1.0s linear infinite';
   } else {
-    // Stages 4-6: Docked at charging hub as visual anchor throughout
-    carXvw = 72;
+    // Stages 6-9: Anchored in view on right side of the highway with headlights illuminating the scene
+    carXvw = 77;
+    roadAnim = 'roadDashAnim 0.9s linear infinite';
+    wheelAnim = 'wheelSpin 0.75s linear infinite';
   }
 
   // Pure hardware state flags
-  const isMoving = progress >= 0.10 && progress < 0.48;
-  const isChargingConnected = progress >= 0.45;
-  const isChargingActive = progress >= 0.45 && progress < 0.54;
-  const isChargeComplete = progress >= 0.54;
+  const isMoving = (progress >= 0.080 && progress < 0.424) || progress >= 0.682;
+  const isChargingConnected = progress >= 0.455 && progress < 0.682;
+  const isChargingActive = progress >= 0.485 && progress < 0.636;
+  const isChargeComplete = progress >= 0.636;
 
-  // Dynamic Battery Top-Up Progression during Stage 4 (Smooth 85% -> 100%)
-  let liveSOC = batterySOC;
-  if (progress >= 0.44 && progress < 0.53) {
-    const pNorm = (progress - 0.44) / (0.53 - 0.44);
-    liveSOC = Math.min(100, Math.round(batterySOC + pNorm * (100 - batterySOC)));
-  } else if (progress >= 0.53) {
+  // Priority #3: 80% -> 100% Charging Animation (5.0 seconds duration, p: 0.485 -> 0.636)
+  let liveSOC = 80;
+  if (progress < 0.485) {
+    liveSOC = 80;
+  } else if (progress < 0.636) {
+    const pNorm = (progress - 0.485) / (0.636 - 0.485);
+    liveSOC = Math.min(100, Math.round(80 + pNorm * 20));
+  } else {
     liveSOC = 100;
   }
+
+  // Pedestal Digital Status Display Strings
+  const pedestalText1 = isChargeComplete
+    ? 'READY'
+    : isChargingActive
+    ? `${liveSOC}%`
+    : isChargingConnected
+    ? 'CONNECTED'
+    : isCarStopped
+    ? 'STANDBY'
+    : isBraking
+    ? 'BAY 02'
+    : 'STANDBY';
+
+  const pedestalText2 = isChargeComplete
+    ? '100% SOH'
+    : isChargingActive
+    ? '150 kW'
+    : isChargingConnected
+    ? 'DC FAST'
+    : '150 kW MAX';
+
+  const pedestalStripColor = isChargeComplete
+    ? '#10B981'
+    : isChargingActive
+    ? '#38BDF8'
+    : isChargingConnected
+    ? '#0EA5E9'
+    : isCarStopped
+    ? '#F59E0B'
+    : '#334155';
 
   return (
     <div className="absolute inset-0 w-full h-full bg-[#030712] overflow-hidden select-none font-sans">
@@ -150,14 +232,14 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
 
         {/* 2. REALISTIC ASPHALT HIGHWAY SURFACE WITH GPU-COMPOSITED ROAD DASH ANIMATION */}
         <div className="absolute top-[58%] inset-x-0 h-44 bg-gradient-to-b from-[#09101E] via-[#060C16] to-[#02050B] border-y border-slate-800/80 flex flex-col justify-center overflow-hidden">
-          {/* Lane Markings (Pure CSS Composited Keyframes - 0 Layout Reflows) */}
+          {/* Lane Markings (Pure CSS Composited Keyframes - Synchronized to Vehicle Speed) */}
           <div className="relative w-full h-2 my-auto opacity-70 overflow-hidden">
             <div
               className="w-[200%] h-full will-change-transform"
               style={{
                 backgroundImage: 'linear-gradient(to right, #94A3B8 55%, transparent 45%)',
                 backgroundSize: '60px 100%',
-                animation: isMoving ? 'roadDashAnim 0.35s linear infinite' : 'none',
+                animation: roadAnim,
               }}
             />
           </div>
@@ -178,11 +260,11 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
             <rect x="24" y="26" width="42" height="36" rx="8" fill="#020617" stroke="#1E293B" strokeWidth="1.5" />
 
             {/* Pedestal Digital Status Display */}
-            <text x="45" y="44" fill="#38BDF8" fontSize="10" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
-              {isChargeComplete ? 'READY' : isChargingActive ? '150 kW' : isChargingConnected ? 'CONNECTED' : 'STANDBY'}
+            <text x="45" y="44" fill={isChargeComplete ? '#10B981' : isChargingActive ? '#38BDF8' : '#94A3B8'} fontSize="9" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
+              {pedestalText1}
             </text>
-            <text x="45" y="55" fill="#94A3B8" fontSize="7" fontFamily="monospace" textAnchor="middle">
-              {isChargeComplete ? '100% SOH' : isChargingActive ? 'DC ULTRA' : 'DC FAST'}
+            <text x="45" y="55" fill="#64748B" fontSize="7" fontFamily="monospace" textAnchor="middle">
+              {pedestalText2}
             </text>
 
             {/* Status Indicator Strip */}
@@ -192,7 +274,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
               width="30"
               height="6"
               rx="3"
-              fill={isChargeComplete ? '#10B981' : isChargingActive ? '#38BDF8' : isChargingConnected ? '#0EA5E9' : '#334155'}
+              fill={pedestalStripColor}
             />
 
             {/* Cable Dock */}
@@ -208,11 +290,17 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
             </defs>
           </svg>
 
-          {/* Heavy-Duty DC Charging Cable (Connects at Stage 4) */}
+          {/* Heavy-Duty DC Charging Cable (Connects at Stage 5) */}
           {isChargingConnected && (
             <svg className="absolute top-[88px] right-[54px] w-40 h-14 overflow-visible pointer-events-none z-20">
               <path d="M 140 10 Q 70 38, 0 12" fill="none" stroke="#1E293B" strokeWidth="6" strokeLinecap="round" />
-              <path d="M 140 10 Q 70 38, 0 12" fill="none" stroke="#10B981" strokeWidth="2.5" strokeDasharray="6 4" />
+              <path
+                d="M 140 10 Q 70 38, 0 12"
+                fill="none"
+                stroke={isChargeComplete ? '#10B981' : '#38BDF8'}
+                strokeWidth="2.5"
+                strokeDasharray="6 4"
+              />
             </svg>
           )}
         </div>
@@ -249,6 +337,8 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
               <path d="M30 60 L206 60" stroke="#0F172A" strokeWidth="1.5" />
               <path d="M84 60 L140 60" stroke="#38BDF8" strokeWidth="2.5" strokeOpacity="0.8" />
               <path d="M200 50 L216 60" stroke="#38BDF8" strokeWidth="3.5" strokeLinecap="round" />
+              
+              {/* Brake Lights: Bright red when decelerating */}
               <path
                 d="M16 60 L24 68"
                 stroke={isBraking ? '#EF4444' : '#991B1B'}
@@ -256,11 +346,11 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
                 strokeLinecap="round"
               />
 
-              {/* Wheels with pure CSS Composited Keyframe Spin */}
+              {/* Wheels with pure CSS Composited Keyframe Spin synchronized with road */}
               <g transform="translate(170, 70)">
                 <circle r="16" fill="#040812" stroke="#334155" strokeWidth="2.5" />
                 <circle r="8.5" fill="#1E293B" stroke="#0EA5E9" strokeWidth="1.5" />
-                <g style={{ animation: isMoving ? 'wheelSpin 0.3s linear infinite' : 'none', transformOrigin: '0 0' }}>
+                <g style={{ animation: wheelAnim, transformOrigin: '0 0' }}>
                   <line x1="-12" y1="0" x2="12" y2="0" stroke="#38BDF8" strokeWidth="1.5" />
                   <line x1="0" y1="-12" x2="0" y2="12" stroke="#38BDF8" strokeWidth="1.5" />
                 </g>
@@ -269,14 +359,21 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
               <g transform="translate(52, 70)">
                 <circle r="16" fill="#040812" stroke="#334155" strokeWidth="2.5" />
                 <circle r="8.5" fill="#1E293B" stroke="#0EA5E9" strokeWidth="1.5" />
-                <g style={{ animation: isMoving ? 'wheelSpin 0.3s linear infinite' : 'none', transformOrigin: '0 0' }}>
+                <g style={{ animation: wheelAnim, transformOrigin: '0 0' }}>
                   <line x1="-12" y1="0" x2="12" y2="0" stroke="#38BDF8" strokeWidth="1.5" />
                   <line x1="0" y1="-12" x2="0" y2="12" stroke="#38BDF8" strokeWidth="1.5" />
                 </g>
               </g>
 
               {/* Charging Port */}
-              <circle cx="36" cy="58" r="4" fill={isChargingConnected ? '#10B981' : '#1E293B'} stroke="#38BDF8" strokeWidth="1.2" />
+              <circle
+                cx="36"
+                cy="58"
+                r="4"
+                fill={isChargeComplete ? '#10B981' : isChargingConnected ? '#38BDF8' : '#1E293B'}
+                stroke="#38BDF8"
+                strokeWidth="1.2"
+              />
 
               <defs>
                 <linearGradient id="cinematicCarBody" x1="0" y1="0" x2="220" y2="96" gradientUnits="userSpaceOnUse">
@@ -296,13 +393,13 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
         </div>
 
         {/* ================================================================= */}
-        {/* STREAMLINED 6-STAGE CONTINUOUS OVERLAYS */}
+        {/* 9-STAGE UNHURRIED CINEMATIC OVERLAYS (Continuous Storytelling) */}
         {/* ================================================================= */}
 
-        {/* STAGE 1: OPENING (0.0s - 1.0s | p: 0.00 - 0.125) */}
+        {/* 01 — INTRO: Calm (0.0s - 3.0s | p: 0.000 - 0.088) */}
         <div
-          className="absolute top-[18%] sm:top-[22%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 flex flex-col items-center justify-center text-center will-change-transform max-w-xl mx-auto"
-          style={getStageStyle(progress, 0.0, 0.125)}
+          className="absolute top-[16%] sm:top-[20%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 flex flex-col items-center justify-center text-center will-change-transform max-w-xl mx-auto"
+          style={getStageStyle(progress, 0.000, 0.088, 0.015, 0.020)}
         >
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-sky-500/30 text-sky-400 text-xs font-mono font-bold tracking-widest uppercase shadow-md">
@@ -320,14 +417,14 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
           </div>
         </div>
 
-        {/* STAGE 2: VEHICLE (1.0s - 2.0s | p: 0.125 - 0.25) */}
+        {/* 02 — VEHICLE: Slow vehicle entry (3.0s - 6.5s | p: 0.080 - 0.195) */}
         <div
-          className="absolute top-[14%] sm:top-[18%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto"
-          style={getStageStyle(progress, 0.125, 0.25)}
+          className="absolute top-[13%] sm:top-[16%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto"
+          style={getStageStyle(progress, 0.080, 0.195, 0.025, 0.025)}
         >
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-sky-500/40 text-xs font-mono font-bold text-sky-400 shadow-md">
-              <span className="w-2 h-2 rounded-full bg-sky-400" />
+              <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
               <span>VEHICLE → VOLTCONNECT</span>
             </div>
             <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
@@ -368,18 +465,19 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
           </div>
         </div>
 
-        {/* STAGE 3: JOURNEY + NETWORK (2.0s - 3.2s | p: 0.25 - 0.40) */}
+        {/* 03 — JOURNEY: Vehicle continues naturally (6.0s - 9.5s | p: 0.180 - 0.285) */}
+        {/* Coexists with Vehicle from 0.180 to 0.195 for continuous storytelling */}
         <div
           className="absolute top-[13%] sm:top-[16%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto"
-          style={getStageStyle(progress, 0.25, 0.40)}
+          style={getStageStyle(progress, 0.180, 0.285, 0.025, 0.025)}
         >
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-teal-500/40 text-xs font-mono font-bold text-teal-300 shadow-md">
               <Route className="w-3.5 h-3.5" />
-              <span>VOLTTRIP + VOLTMAP • 1,766 STATIONS</span>
+              <span>VOLTTRIP ROUTE ENGINE</span>
             </div>
             <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Your journey & network. Intelligent.
+              Your journey. Intelligent.
             </h2>
             {/* Dynamic Route Corridor */}
             <div className="bg-slate-950/95 border border-teal-500/30 p-3.5 sm:p-4 rounded-2xl shadow-lg space-y-2">
@@ -392,7 +490,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
                   <div className="absolute inset-0 bg-gradient-to-r from-sky-500 via-teal-400 to-amber-400" />
                 </div>
                 <div className="flex flex-col items-center gap-0.5 z-10">
-                  <div className="w-3.5 h-3.5 rounded-full bg-amber-400 border border-white flex items-center justify-center text-[8px] text-slate-950 font-black">
+                  <div className="w-4 h-4 rounded-full bg-amber-400 border border-white flex items-center justify-center text-[9px] text-slate-950 font-black">
                     ⚡
                   </div>
                   <span className="text-[9px] font-mono font-bold text-amber-300">150kW Stop</span>
@@ -405,8 +503,27 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
                   <span className="text-[9px] font-mono font-bold text-emerald-300">Destination</span>
                 </div>
               </div>
+              <p className="text-[11px] text-slate-400 font-medium">
+                Dynamic range calculation, terrain compensation, and verified charging waypoints.
+              </p>
             </div>
+          </div>
+        </div>
 
+        {/* 04 — NETWORK: Network becomes visible (9.0s - 12.0s | p: 0.270 - 0.355) */}
+        {/* Coexists with Journey from 0.270 to 0.285 */}
+        <div
+          className="absolute top-[13%] sm:top-[16%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto"
+          style={getStageStyle(progress, 0.270, 0.355, 0.025, 0.025)}
+        >
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-sky-500/40 text-xs font-mono font-bold text-sky-400 shadow-md">
+              <MapPin className="w-3.5 h-3.5" />
+              <span>VOLTMAP • 1,766 VERIFIED STATIONS</span>
+            </div>
+            <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+              Your network. Visible.
+            </h2>
             {/* Verified Network Charging Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-2xl mx-auto pt-0.5">
               <div className="bg-slate-950/95 border border-emerald-500/30 p-2.5 rounded-xl shadow-md text-left space-y-0.5">
@@ -439,46 +556,131 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
           </div>
         </div>
 
-        {/* STAGE 4: CHARGING + VOICE AI (3.2s - 4.4s | p: 0.40 - 0.55) */}
+        {/* ⚡ 05 — CHARGING: THE HERO WOW MOMENT (11.5s - 23.5s | p: 0.345 - 0.700) */}
+        {/* Slower, deliberate pacing: Approach -> Slow Down -> Stop -> Connect -> 80% -> 100% -> Hold -> Depart */}
         <div
-          className="absolute top-[13%] sm:top-[16%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-xl mx-auto"
-          style={getStageStyle(progress, 0.40, 0.55)}
+          className="absolute top-[12%] sm:top-[14%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-xl mx-auto"
+          style={getStageStyle(progress, 0.345, 0.700, 0.025, 0.025)}
         >
           <div className="space-y-3">
+            {/* Status Pill Badge */}
             <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-extrabold uppercase tracking-wider shadow-md">
-              <Zap className="w-3.5 h-3.5 fill-current" />
-              <span>SMART CHARGING • 62 VOICE INTENTS</span>
+              <Zap className="w-3.5 h-3.5 fill-current animate-pulse" />
+              <span>
+                {isChargeComplete
+                  ? 'CHARGE COMPLETE • 100% SOH'
+                  : isChargingActive
+                  ? '⚡ ULTRA-FAST DC CHARGING ACTIVE'
+                  : isChargingConnected
+                  ? 'CHARGER CONNECTED • 150 kW DC'
+                  : isCarStopped
+                  ? 'ALIGNED IN CHARGING BAY 02'
+                  : 'APPROACHING CHARGING BAY'}
+              </span>
             </div>
+
             <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Your charge & assistant. Optimized.
+              {isChargeComplete
+                ? 'Fully charged. Ready for the road.'
+                : isChargingActive
+                ? 'Your charge. Accelerated.'
+                : isChargingConnected
+                ? 'Your charge. Connected.'
+                : 'Your charge. Approaching.'}
             </h2>
-            {/* Integrated Charging Meter + Voice AI Dialogue Morph */}
-            <div className="bg-slate-950/95 border border-emerald-500/30 p-4 rounded-2xl shadow-xl space-y-3">
-              {/* Battery Top-Up Strip */}
-              <div className="flex items-center justify-between text-xs font-mono font-bold">
-                <span className="text-slate-300">Ultra-Fast DC Bay 02 • Connected</span>
-                <span className="text-emerald-400 font-extrabold">{liveSOC}% SOC</span>
+
+            {/* Hero Interactive Charging Meter Card */}
+            <div className="bg-slate-950/95 border border-emerald-500/40 p-4 sm:p-5 rounded-2xl shadow-2xl space-y-3.5">
+              
+              {/* Top Readout: Bay Info & Prominent Live SOC */}
+              <div className="flex items-center justify-between">
+                <div className="text-left">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase font-bold">Station Bay</div>
+                  <div className="text-xs sm:text-sm font-bold text-white">Ultra-Fast DC Hub • Bay 02</div>
+                </div>
+
+                <div className="text-right">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase font-bold">State of Charge</div>
+                  <div className="text-xl sm:text-2xl font-extrabold font-mono text-emerald-400 flex items-center gap-1">
+                    <span>{liveSOC}%</span>
+                    <span className="text-xs text-slate-400 font-normal">SOC</span>
+                  </div>
+                </div>
               </div>
-              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden p-0.5 border border-slate-700">
+
+              {/* Animated Progress Bar */}
+              <div className="w-full bg-slate-900 h-3 rounded-full overflow-hidden p-0.5 border border-slate-700 relative">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 transition-all duration-150"
+                  className="h-full rounded-full bg-gradient-to-r from-teal-500 via-emerald-400 to-emerald-300 transition-all duration-200"
                   style={{ width: `${liveSOC}%` }}
                 />
               </div>
 
-              {/* Seamless Voice AI Utterance */}
-              <div className="border-t border-slate-800/80 pt-2.5 flex items-center justify-between gap-3 text-left">
-                <div className="flex items-center gap-2 max-w-[48%]">
-                  <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
-                    <Mic className="w-3.5 h-3.5 text-sky-400" />
-                  </div>
-                  <div className="text-[10px] text-slate-300 italic">"Find the best charging stop on my route."</div>
+              {/* Explicit 80% -> 84% -> 88% -> 92% -> 96% -> 100% Stepped Progress Indicators */}
+              <div className="grid grid-cols-6 gap-1 pt-0.5">
+                {[80, 84, 88, 92, 96, 100].map((stepSOC) => {
+                  const isReached = liveSOC >= stepSOC;
+                  const isCurrent = liveSOC === stepSOC || (liveSOC > stepSOC && liveSOC < stepSOC + 4);
+                  return (
+                    <div
+                      key={stepSOC}
+                      className={`py-1 rounded-lg border text-center font-mono text-[10px] font-bold transition-colors ${
+                        isReached
+                          ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-500'
+                      } ${isCurrent ? 'ring-1 ring-emerald-400' : ''}`}
+                    >
+                      {stepSOC}%
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Charging Telemetry Details */}
+              <div className="border-t border-slate-800/80 pt-2.5 flex items-center justify-between text-left text-[11px] font-mono">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span className="text-slate-300">
+                    {isChargeComplete ? 'Ready to Depart' : isChargingActive ? '150 kW DC Ultra Fast' : 'Connecting Protocol'}
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-2 max-w-[50%] justify-end text-right">
-                  <div className="text-[10px] text-emerald-300 font-semibold">"Charging stop optimized. 150 kW DC routed."</div>
-                  <div className="w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <div className="text-right text-emerald-400 font-bold">
+                  {isChargeComplete ? '425 km Full Range' : '+18 km / min'}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        {/* 06 — VOICE AI: Vehicle resumes (23.5s - 26.5s | p: 0.695 - 0.780) */}
+        <div
+          className="absolute top-[13%] sm:top-[16%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-xl mx-auto"
+          style={getStageStyle(progress, 0.695, 0.780, 0.025, 0.025)}
+        >
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-mono font-bold uppercase tracking-wider shadow-md">
+              <Mic className="w-3.5 h-3.5 text-purple-400" />
+              <span>VOLT VOICE AI • 62 INTENTS</span>
+            </div>
+            <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+              Your assistant. Always ready.
+            </h2>
+            {/* Seamless Voice AI Utterance Dialog */}
+            <div className="bg-slate-950/95 border border-purple-500/30 p-4 rounded-2xl shadow-xl space-y-3">
+              <div className="flex items-center justify-between gap-3 text-left">
+                <div className="flex items-center gap-2.5 max-w-[48%]">
+                  <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
+                    <Mic className="w-4 h-4 text-sky-400" />
+                  </div>
+                  <div className="text-xs text-slate-300 italic">"Find the best charging stop on my route."</div>
+                </div>
+
+                <div className="flex items-center gap-2.5 max-w-[50%] justify-end text-right">
+                  <div className="text-xs text-emerald-300 font-semibold">"Charging stop optimized. 150 kW DC routed."</div>
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4 text-emerald-400" />
                   </div>
                 </div>
               </div>
@@ -486,10 +688,10 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
           </div>
         </div>
 
-        {/* STAGE 5: PARTNERS + OPERATIONS (4.4s - 5.5s | p: 0.55 - 0.69) */}
+        {/* 07 & 08 — PARTNERS + OPERATIONS: Coexisting Dual Pillars (26.0s - 30.5s | p: 0.770 - 0.910) */}
         <div
           className="absolute top-[13%] sm:top-[16%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto"
-          style={getStageStyle(progress, 0.55, 0.69)}
+          style={getStageStyle(progress, 0.770, 0.910, 0.025, 0.025)}
         >
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 shadow-md">
@@ -497,7 +699,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
               <span>PARTNERS + OPERATIONS = RELIABLE ECOSYSTEM</span>
             </div>
             <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Partners & operations. Powered.
+              Partners power it. Operations keep it moving.
             </h2>
             {/* Lightweight Floating Dual Cards (Partner + Admin Operations) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
@@ -550,10 +752,10 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
           </div>
         </div>
 
-        {/* STAGE 6: FINAL ECOSYSTEM CONVERGENCE (5.5s - 8.0s | p: 0.69 - 1.00) */}
+        {/* 09 — FINAL ECOSYSTEM CONVERGENCE (30.0s - 33.0s+ | p: 0.895 - 1.000) */}
         <div
           className="absolute inset-0 z-40 flex flex-col items-center justify-center p-4 sm:p-6 text-center bg-slate-950/90 will-change-transform overflow-y-auto"
-          style={getStageStyle(progress, 0.69, 1.0, 0.03)}
+          style={getStageStyle(progress, 0.895, 1.0, 0.025, 0.000)}
         >
           <div className="max-w-xl w-full space-y-3.5 bg-slate-900/95 border border-emerald-500/40 p-5 sm:p-6 rounded-3xl shadow-2xl my-auto">
             
