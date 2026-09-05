@@ -32,8 +32,8 @@ export const VoltConnectIntro: React.FC<VoltConnectIntroProps> = ({
   const pausedTimeRef = useRef<number>(0);
   const lastTimestampRef = useRef<number>(0);
 
-  // Total cinematic timeline duration: 18.5 seconds for complete 9-scene ecosystem storytelling
-  const TOTAL_DURATION_MS = 18500;
+  // Total cinematic timeline duration: 8.0 seconds for crisp, fast-flowing ecosystem storytelling (7-9s target)
+  const TOTAL_DURATION_MS = 8000;
 
   // Initialize intro visibility based on first-time visit, URL debug params, or forced replay
   useEffect(() => {
@@ -155,8 +155,8 @@ export const VoltConnectIntro: React.FC<VoltConnectIntroProps> = ({
       const elapsed = timestamp - startTimeRef.current;
       const currentProgress = Math.min(1, elapsed / TOTAL_DURATION_MS);
 
-      // Quantize progress slightly to maintain smooth rendering without unnecessary state thrashing
-      if (Math.abs(currentProgress - lastStepProgress) > 0.002 || currentProgress >= 1) {
+      // Quantize progress to ~0.004 step (32ms) to prevent unnecessary React re-render thrashing
+      if (Math.abs(currentProgress - lastStepProgress) > 0.004 || currentProgress >= 1) {
         lastStepProgress = currentProgress;
         setProgress(currentProgress);
       }
