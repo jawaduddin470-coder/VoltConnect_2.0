@@ -1,11 +1,12 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { VoltConnectLogo } from '@/components/common/VoltConnectLogo';
 import {
   Zap,
   Bell,
   Plus,
   ShieldCheck,
-  Building2,
   ExternalLink,
   Radio,
 } from 'lucide-react';
@@ -31,20 +32,17 @@ export const PartnerHeader: React.FC<PartnerHeaderProps> = ({
     <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80 px-4 sm:px-6 py-3 transition-colors">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         {/* Brand & Portal Identity */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-sky-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 ring-1 ring-white/20">
-            <Building2 className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-base font-extrabold text-white tracking-tight">VoltConnect</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                Partner Portal
-              </span>
-            </div>
-            <p className="text-[11px] font-medium text-slate-400 hidden sm:block">
-              Charge Point Operator Network Command
-            </p>
+        <div className="flex items-center gap-2.5">
+          <Link to="/partner/dashboard" className="flex items-center gap-2.5 shrink-0">
+            <VoltConnectLogo variant="navbar" />
+            <span className="text-[9px] font-bold px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono uppercase tracking-wider">
+              PARTNER PORTAL
+            </span>
+          </Link>
+
+          {/* Operator Identity Separator */}
+          <div className="hidden sm:flex items-center text-[11px] font-medium text-slate-400 border-l border-slate-800 pl-3 ml-1">
+            <span>Charge Point Operator Network Command</span>
           </div>
         </div>
 
