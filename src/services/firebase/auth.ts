@@ -24,9 +24,9 @@ export function getAuthErrorMessage(error: any): string {
   const code = error?.code || '';
   const message = error?.message || '';
 
-  if (code === 'auth/unauthorized-domain') {
-    const domain = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
-    return `Domain Not Authorized in Firebase: "${domain}" has not been added to your Firebase Authorized Domains. In Firebase Console, navigate to Authentication -> Settings -> Authorized domains and click "Add domain" for "${domain}".`;
+  if (code === 'auth/unauthorized-domain' || message.includes('Illegal url for new iframe')) {
+    const domain = typeof window !== 'undefined' ? window.location.hostname : 'volt-connect-2-0.vercel.app';
+    return `Domain Not Authorized in Firebase: "${domain}" is not added to your Firebase Authorized Domains. In Firebase Console, navigate to Authentication -> Settings -> Authorized domains and click "Add domain" for "${domain}".`;
   }
 
   const isSafari = typeof navigator !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
