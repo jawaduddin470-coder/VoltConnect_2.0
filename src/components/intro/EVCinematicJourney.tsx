@@ -20,46 +20,43 @@ import {
 } from 'lucide-react';
 
 interface EVCinematicJourneyProps {
-  progress: number; // 0.0 to 1.0 (across 33.0s unhurried cinematic timeline)
+  progress: number; // 0.0 to 1.0 (across 23.5s controlled cinematic timeline)
   activeVehicle?: UserVehicle | null;
   onStartJourney: () => void;
   onEnterApp: () => void;
 }
 
-// GPU-accelerated smooth overlapping transition helper (cubic-bezier easing with subtle scale & translate)
-function getStageStyle(
-  progress: number,
-  startP: number,
-  endP: number,
-  fadeInP = 0.025,
-  fadeOutP = 0.025
-): React.CSSProperties {
-  if (progress < startP - fadeInP || progress > endP + fadeOutP) {
-    return { display: 'none', opacity: 0, pointerEvents: 'none' };
-  }
-  let opacity = 1;
-  let translateY = 0;
-  let scale = 1;
+export type StoryStage =
+  | 'INTRO'
+  | 'VEHICLE'
+  | 'JOURNEY'
+  | 'NETWORK'
+  | 'CHARGING'
+  | 'VOICE_AI'
+  | 'PARTNERS'
+  | 'OPERATIONS'
+  | 'FINAL';
 
-  if (progress < startP) {
-    const r = (progress - (startP - fadeInP)) / fadeInP;
-    opacity = Math.max(0, Math.min(1, r));
-    translateY = (1 - r) * 10;
-    scale = 0.97 + r * 0.03;
-  } else if (progress > endP) {
-    const r = (progress - endP) / fadeOutP;
-    opacity = Math.max(0, Math.min(1, 1 - r));
-    translateY = -r * 8;
-    scale = 1 - r * 0.02;
-  }
-
-  return {
-    opacity,
-    transform: `translate3d(0, ${translateY.toFixed(1)}px, 0) scale(${scale.toFixed(3)})`,
-    transition: 'opacity 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
-    pointerEvents: opacity > 0.75 ? 'auto' : 'none',
-  };
+interface StageTiming {
+  id: StoryStage;
+  start: number; // seconds
+  end: number;   // seconds
 }
+
+// Strictly partitioned timeline: Exactly 23.5s total duration (target 22-24s)
+const TOTAL_DURATION_SEC = 23.5;
+
+const STAGES: StageTiming[] = [
+  { id: 'INTRO', start: 0.0, end: 2.0 },
+  { id: 'VEHICLE', start: 2.0, end: 4.5 },
+  { id: 'JOURNEY', start: 4.5, end: 7.0 },
+  { id: 'NETWORK', start: 7.0, end: 9.0 },
+  { id: 'CHARGING', start: 9.0, end: 16.7 },
+  { id: 'VOICE_AI', start: 16.7, end: 18.7 },
+  { id: 'PARTNERS', start: 18.7, end: 20.3 },
+  { id: 'OPERATIONS', start: 20.3, end: 21.9 },
+  { id: 'FINAL', start: 21.9, end: 24.0 },
+];
 
 export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
   progress,
@@ -76,26 +73,46 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
   const maxDCPower = activeVehicle?.dcMaxPowerKW ?? 60;
   const connectorType = activeVehicle?.connectorTypes?.[0] || 'CCS2';
 
-  // =========================================================================
-  // CONTINUOUS 9-STAGE STORYLINE TIMELINE (0.0 to 1.0 across 33.0 seconds)
-  // Stage 1 (0.0s - 3.0s | p: 0.000 - 0.091): INTRO ("One ecosystem. Every connection.")
-  // Stage 2 (3.0s - 6.5s | p: 0.091 - 0.197): VEHICLE ("Your vehicle. Connected.")
-  // Stage 3 (6.0s - 9.5s | p: 0.180 - 0.288): JOURNEY ("Your journey. Intelligent.")
-  // Stage 4 (9.0s - 12.0s | p: 0.270 - 0.364): NETWORK ("Your network. Visible.")
-  // Stage 5 (11.5s - 23.5s | p: 0.348 - 0.712): ⚡ CHARGING HERO MOMENT (12.0s duration!)
-  //   11.5s - 14.0s (p: 0.348 - 0.424): Approach & Smooth Deceleration (2.5s)
-  //   14.0s - 15.0s (p: 0.424 - 0.455): Complete Stop at Pedestal (1.0s)
-  //   15.0s - 16.0s (p: 0.455 - 0.485): Charger Cable Connects (1.0s)
-  //   16.0s - 21.0s (p: 0.485 - 0.636): 80% -> 100% Charging Animation (5.0s)
-  //   21.0s - 22.5s (p: 0.636 - 0.682): 100% Completion Hold (1.5s)
-  //   22.5s - 23.5s (p: 0.682 - 0.712): Departure & Smooth Acceleration (1.0s)
-  // Stage 6 (23.5s - 26.5s | p: 0.695 - 0.788): VOICE AI ("Your assistant. Always ready.")
-  // Stage 7 (26.0s - 28.5s | p: 0.770 - 0.860): PARTNERS ("Partners power the network.")
-  // Stage 8 (28.0s - 30.5s | p: 0.835 - 0.920): OPERATIONS ("Operations keep it moving.")
-  // Stage 9 (30.0s - 33.0s | p: 0.895 - 1.000): FINAL ECOSYSTEM ("One ecosystem. Built for electric mobility.")
-  // =========================================================================
+  // Current elapsed seconds on the master timeline
+  const currentTime = Math.max(0, Math.min(TOTAL_DURATION_SEC, progress * TOTAL_DURATION_SEC));
 
-  // Continuous Vehicle X-Position Motion Curve (translate3d in vw units for GPU acceleration)
+  // Determine current active story stage (strictly ONE active stage at any millisecond)
+  const activeStageObj =
+    STAGES.find((s) => currentTime >= s.start && currentTime < s.end) ||
+    (currentTime >= 21.9 ? STAGES[8] : STAGES[0]);
+  const activeStage = activeStageObj.id;
+
+  // Single card lifecycle: 280ms enter, stable hold, 200ms exit (ABSOLUTELY ZERO OVERLAP)
+  const tau = currentTime - activeStageObj.start;
+  const stageDuration = activeStageObj.end - activeStageObj.start;
+  let cardOpacity = 1;
+  let cardTranslateY = 0;
+
+  if (activeStage === 'FINAL') {
+    const r = Math.min(1, Math.max(0, tau / 0.35));
+    cardOpacity = r;
+    cardTranslateY = (1 - r) * 10;
+  } else {
+    if (tau < 0.28) {
+      // Clean 280ms entrance
+      const r = tau / 0.28;
+      cardOpacity = Math.max(0, Math.min(1, r));
+      cardTranslateY = (1 - r) * 10;
+    } else if (tau > stageDuration - 0.20) {
+      // Clean 200ms exit
+      const r = (stageDuration - tau) / 0.20;
+      cardOpacity = Math.max(0, Math.min(1, r));
+      cardTranslateY = -(1 - r) * 8;
+    } else {
+      // Completely stable hold
+      cardOpacity = 1;
+      cardTranslateY = 0;
+    }
+  }
+
+  // =========================================================================
+  // VEHICLE MOVEMENT: Slow, smooth, physically grounded across the 23.5s story
+  // =========================================================================
   let carXvw = -18;
   let isBraking = false;
   let isCarStopped = false;
@@ -103,75 +120,113 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
   let roadAnim = 'none';
   let wheelAnim = 'none';
 
-  if (progress < 0.080) {
-    // Stage 1: Resting offscreen during calm intro
+  if (currentTime < 2.0) {
+    // 01 INTRO: Resting offscreen
     carXvw = -18;
     roadAnim = 'none';
     wheelAnim = 'none';
-  } else if (progress < 0.197) {
-    // Stage 2: Enters smoothly onto highway (relaxed driving speed, not running)
-    const pNorm = (progress - 0.080) / (0.197 - 0.080);
-    const easeOut = 1 - Math.pow(1 - pNorm, 2.5);
-    carXvw = -18 + easeOut * 34; // -18vw -> 16vw
-    roadAnim = 'roadDashAnim 0.85s linear infinite';
-    wheelAnim = 'wheelSpin 0.7s linear infinite';
-  } else if (progress < 0.288) {
-    // Stage 3: Cruising along highway during journey reveal
-    const pNorm = (progress - 0.197) / (0.288 - 0.197);
-    carXvw = 16 + pNorm * 15; // 16vw -> 31vw
-    roadAnim = 'roadDashAnim 0.85s linear infinite';
-    wheelAnim = 'wheelSpin 0.7s linear infinite';
-  } else if (progress < 0.348) {
-    // Stage 4: Cruising along highway as charging network appears
-    const pNorm = (progress - 0.288) / (0.348 - 0.288);
-    carXvw = 31 + pNorm * 14; // 31vw -> 45vw
-    roadAnim = 'roadDashAnim 0.85s linear infinite';
-    wheelAnim = 'wheelSpin 0.7s linear infinite';
-  } else if (progress < 0.424) {
-    // Stage 5 Approach: Vehicle decelerates smoothly into the charging bay (velocity -> 0)
+  } else if (currentTime < 4.5) {
+    // 02 VEHICLE: Enters smoothly onto highway (cubic-bezier ease-out, calm driving speed)
+    const u = (currentTime - 2.0) / 2.5;
+    const ease = 1 - Math.pow(1 - u, 3);
+    carXvw = -18 + ease * 34; // -18vw -> 16vw
+    roadAnim = 'roadDashAnim 1.0s linear infinite';
+    wheelAnim = 'wheelSpin 0.8s linear infinite';
+  } else if (currentTime < 7.0) {
+    // 03 JOURNEY: Cruising steadily along highway corridor
+    const u = (currentTime - 4.5) / 2.5;
+    carXvw = 16 + u * 16; // 16vw -> 32vw
+    roadAnim = 'roadDashAnim 1.0s linear infinite';
+    wheelAnim = 'wheelSpin 0.8s linear infinite';
+  } else if (currentTime < 9.0) {
+    // 04 NETWORK: Cruising steadily as charging network appears
+    const u = (currentTime - 7.0) / 2.0;
+    carXvw = 32 + u * 16; // 32vw -> 48vw
+    roadAnim = 'roadDashAnim 1.0s linear infinite';
+    wheelAnim = 'wheelSpin 0.8s linear infinite';
+  } else if (currentTime < 10.0) {
+    // 05 CHARGING: Approach charger, decelerate smoothly (velocity -> 0)
     isBraking = true;
-    const pNorm = (progress - 0.348) / (0.424 - 0.348);
-    const easeOut = 1 - Math.pow(1 - pNorm, 2.2);
-    carXvw = 45 + easeOut * 20; // 45vw -> 65vw
-    roadAnim = 'roadDashAnim 1.8s linear infinite'; // Visibly slowing down
-    wheelAnim = 'wheelSpin 1.5s linear infinite';
-  } else if (progress < 0.682) {
-    // Stage 5 Stopped: Vehicle comes to a complete stop at charging pedestal
+    const u = (currentTime - 9.0) / 1.7;
+    const ease = 1 - Math.pow(1 - u, 2.2);
+    carXvw = 48 + ease * 17; // 48vw -> 65vw
+    roadAnim = 'roadDashAnim 2.0s linear infinite'; // Visibly slowing down
+    wheelAnim = 'wheelSpin 1.8s linear infinite';
+  } else if (currentTime < 16.3) {
+    // 05 CHARGING: Complete stop at charging pedestal during 80% -> 100% -> READY
     carXvw = 65;
     isCarStopped = true;
     roadAnim = 'none'; // Completely stationary
     wheelAnim = 'none';
-  } else if (progress < 0.720) {
-    // Stage 5 Departure: Cable disconnects, smooth acceleration departure
+  } else if (currentTime < 16.7) {
+    // 05 CHARGING: Smooth acceleration departure (0.4s)
     isDeparting = true;
-    const pNorm = (progress - 0.682) / (0.720 - 0.682);
-    const easeIn = Math.pow(pNorm, 2);
-    carXvw = 65 + easeIn * 12; // 65vw -> 77vw
+    const u = (currentTime - 16.3) / 0.4;
+    carXvw = 65 + Math.pow(u, 2) * 12; // 65vw -> 77vw
     roadAnim = 'roadDashAnim 1.2s linear infinite';
     wheelAnim = 'wheelSpin 1.0s linear infinite';
   } else {
-    // Stages 6-9: Anchored in view on right side of the highway with headlights illuminating the scene
+    // 06-09: Anchored in view on right side of the highway with headlights illuminating the scene
     carXvw = 77;
-    roadAnim = 'roadDashAnim 0.9s linear infinite';
-    wheelAnim = 'wheelSpin 0.75s linear infinite';
+    roadAnim = 'roadDashAnim 1.0s linear infinite';
+    wheelAnim = 'wheelSpin 0.8s linear infinite';
   }
 
   // Pure hardware state flags
-  const isMoving = (progress >= 0.080 && progress < 0.424) || progress >= 0.682;
-  const isChargingConnected = progress >= 0.455 && progress < 0.682;
-  const isChargingActive = progress >= 0.485 && progress < 0.636;
-  const isChargeComplete = progress >= 0.636;
+  const isMoving = (currentTime >= 2.0 && currentTime < 10.0) || currentTime >= 16.3;
+  const isChargingConnected = currentTime >= 10.7 && currentTime < 16.3;
 
-  // Priority #3: 80% -> 100% Charging Animation (5.0 seconds duration, p: 0.485 -> 0.636)
+  // =========================================================================
+  // ⚡ 05 CHARGING WOW MOMENT: Distinct 80% -> 84% -> 88% -> 92% -> 96% -> 100%
+  // =========================================================================
   let liveSOC = 80;
-  if (progress < 0.485) {
+  let chargingPhase: 'APPROACH' | 'STOP' | 'CONNECT' | '80_84' | '84_88' | '88_92' | '92_96' | '96_100' | 'HOLD_100' | 'READY' | 'DEPART' = 'APPROACH';
+
+  if (currentTime < 9.0) {
     liveSOC = 80;
-  } else if (progress < 0.636) {
-    const pNorm = (progress - 0.485) / (0.636 - 0.485);
-    liveSOC = Math.min(100, Math.round(80 + pNorm * 20));
+    chargingPhase = 'APPROACH';
+  } else if (currentTime < 10.0) {
+    chargingPhase = 'APPROACH';
+    liveSOC = 80;
+  } else if (currentTime < 10.7) {
+    chargingPhase = 'STOP';
+    liveSOC = 80;
+  } else if (currentTime < 11.2) {
+    chargingPhase = 'CONNECT';
+    liveSOC = 80;
+  } else if (currentTime < 12.0) {
+    chargingPhase = '80_84';
+    const u = (currentTime - 11.2) / 0.8;
+    liveSOC = Math.min(84, Math.round(80 + u * 4));
+  } else if (currentTime < 12.8) {
+    chargingPhase = '84_88';
+    const u = (currentTime - 12.0) / 0.8;
+    liveSOC = Math.min(88, Math.round(84 + u * 4));
+  } else if (currentTime < 13.6) {
+    chargingPhase = '88_92';
+    const u = (currentTime - 12.8) / 0.8;
+    liveSOC = Math.min(92, Math.round(88 + u * 4));
+  } else if (currentTime < 14.4) {
+    chargingPhase = '92_96';
+    const u = (currentTime - 13.6) / 0.8;
+    liveSOC = Math.min(96, Math.round(92 + u * 4));
+  } else if (currentTime < 15.3) {
+    chargingPhase = '96_100';
+    const u = (currentTime - 14.4) / 0.9;
+    liveSOC = Math.min(100, Math.round(96 + u * 4));
+  } else if (currentTime < 15.9) {
+    chargingPhase = 'HOLD_100';
+    liveSOC = 100;
+  } else if (currentTime < 16.3) {
+    chargingPhase = 'READY';
+    liveSOC = 100;
   } else {
+    chargingPhase = 'DEPART';
     liveSOC = 100;
   }
+
+  const isChargingActive = currentTime >= 11.2 && currentTime < 15.3;
+  const isChargeComplete = currentTime >= 15.3;
 
   // Pedestal Digital Status Display Strings
   const pedestalText1 = isChargeComplete
@@ -290,7 +345,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
             </defs>
           </svg>
 
-          {/* Heavy-Duty DC Charging Cable (Connects at Stage 5) */}
+          {/* Heavy-Duty DC Charging Cable (Connects at 10.7s, detaches at 16.3s) */}
           {isChargingConnected && (
             <svg className="absolute top-[88px] right-[54px] w-40 h-14 overflow-visible pointer-events-none z-20">
               <path d="M 140 10 Q 70 38, 0 12" fill="none" stroke="#1E293B" strokeWidth="6" strokeLinecap="round" />
@@ -298,7 +353,7 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
                 d="M 140 10 Q 70 38, 0 12"
                 fill="none"
                 stroke={isChargeComplete ? '#10B981' : '#38BDF8'}
-                strokeWidth="2.5"
+                strokeWidth={isChargingActive ? '3' : '2'}
                 strokeDasharray="6 4"
               />
             </svg>
@@ -393,437 +448,447 @@ export const EVCinematicJourney: React.FC<EVCinematicJourneyProps> = ({
         </div>
 
         {/* ================================================================= */}
-        {/* 9-STAGE UNHURRIED CINEMATIC OVERLAYS (Continuous Storytelling) */}
+        {/* 5. SINGLE MASTER STORY CARD SLOT — ABSOLUTELY ZERO CARD OVERLAP */}
+        {/* At any millisecond, EXACTLY ONE card is mounted in the DOM slot */}
         {/* ================================================================= */}
-
-        {/* 01 — INTRO: Calm (0.0s - 3.0s | p: 0.000 - 0.088) */}
-        <div
-          className="absolute top-[16%] sm:top-[20%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 flex flex-col items-center justify-center text-center will-change-transform max-w-xl mx-auto"
-          style={getStageStyle(progress, 0.000, 0.088, 0.015, 0.020)}
-        >
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-sky-500/30 text-sky-400 text-xs font-mono font-bold tracking-widest uppercase shadow-md">
-              <Sparkles className="w-3.5 h-3.5" /> VOLTCONNECT 2.0
-            </div>
-            <h1 className="font-heading text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight">
-              One ecosystem. <br className="hidden sm:inline" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400">
-                Every connection.
-              </span>
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-400 font-medium max-w-md mx-auto leading-relaxed">
-              Powering connected electric mobility across vehicles, drivers, charging infrastructure, and operations.
-            </p>
-          </div>
-        </div>
-
-        {/* 02 — VEHICLE: Slow vehicle entry (3.0s - 6.5s | p: 0.080 - 0.195) */}
-        <div
-          className="absolute top-[13%] sm:top-[16%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto"
-          style={getStageStyle(progress, 0.080, 0.195, 0.025, 0.025)}
-        >
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-sky-500/40 text-xs font-mono font-bold text-sky-400 shadow-md">
-              <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
-              <span>VEHICLE → VOLTCONNECT</span>
-            </div>
-            <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Your vehicle. Connected.
-            </h2>
-            {/* Live Telemetry HUD Cards */}
-            <div className="flex items-center justify-center gap-2.5 sm:gap-4 flex-wrap pt-1">
-              <div className="bg-slate-950/95 border border-sky-500/30 px-3.5 sm:px-4 py-2.5 rounded-2xl shadow-md flex items-center gap-3 min-w-[130px]">
-                <div className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
-                  <Battery className="w-4 h-4" />
+        {activeStage !== 'FINAL' && (
+          <div
+            className="absolute top-[12%] sm:top-[15%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto"
+            style={{
+              opacity: cardOpacity,
+              transform: `translate3d(0, ${cardTranslateY.toFixed(1)}px, 0)`,
+              transition: 'opacity 0.15s ease-out, transform 0.15s ease-out',
+            }}
+          >
+            {/* 01 — INTRO (0.0s – 2.0s) */}
+            {activeStage === 'INTRO' && (
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-sky-500/30 text-sky-400 text-xs font-mono font-bold tracking-widest uppercase shadow-md">
+                  <Sparkles className="w-3.5 h-3.5" /> VOLTCONNECT 2.0
                 </div>
-                <div className="text-left">
-                  <div className="text-[9px] font-mono text-slate-400 font-bold uppercase">Battery SOC</div>
-                  <div className="text-xs sm:text-sm font-extrabold text-white font-mono">{batterySOC}% • 98% SOH</div>
-                </div>
+                <h1 className="font-heading text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight">
+                  One ecosystem. <br className="hidden sm:inline" />
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400">
+                    Every connection.
+                  </span>
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-400 font-medium max-w-md mx-auto leading-relaxed">
+                  Powering connected electric mobility across vehicles, drivers, charging infrastructure, and operations.
+                </p>
               </div>
+            )}
 
-              <div className="bg-slate-950/95 border border-teal-500/30 px-3.5 sm:px-4 py-2.5 rounded-2xl shadow-md flex items-center gap-3 min-w-[130px]">
-                <div className="w-8 h-8 rounded-xl bg-teal-500/15 border border-teal-500/30 flex items-center justify-center text-teal-400">
-                  <Navigation className="w-4 h-4" />
+            {/* 02 — VEHICLE (2.0s – 4.5s) */}
+            {activeStage === 'VEHICLE' && (
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-sky-500/40 text-xs font-mono font-bold text-sky-400 shadow-md">
+                  <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+                  <span>VEHICLE → VOLTCONNECT</span>
                 </div>
-                <div className="text-left">
-                  <div className="text-[9px] font-mono text-slate-400 font-bold uppercase">Est. Range</div>
-                  <div className="text-xs sm:text-sm font-extrabold text-white font-mono">{rangeKm} km</div>
-                </div>
-              </div>
-
-              <div className="bg-slate-950/95 border border-emerald-500/30 px-3.5 sm:px-4 py-2.5 rounded-2xl shadow-md flex items-center gap-3 min-w-[130px]">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <Zap className="w-4 h-4" />
-                </div>
-                <div className="text-left">
-                  <div className="text-[9px] font-mono text-slate-400 font-bold uppercase">Max Fast Charge</div>
-                  <div className="text-xs sm:text-sm font-extrabold text-white font-mono">{maxDCPower} kW • {connectorType}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 03 — JOURNEY: Vehicle continues naturally (6.0s - 9.5s | p: 0.180 - 0.285) */}
-        {/* Coexists with Vehicle from 0.180 to 0.195 for continuous storytelling */}
-        <div
-          className="absolute top-[13%] sm:top-[16%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto"
-          style={getStageStyle(progress, 0.180, 0.285, 0.025, 0.025)}
-        >
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-teal-500/40 text-xs font-mono font-bold text-teal-300 shadow-md">
-              <Route className="w-3.5 h-3.5" />
-              <span>VOLTTRIP ROUTE ENGINE</span>
-            </div>
-            <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Your journey. Intelligent.
-            </h2>
-            {/* Dynamic Route Corridor */}
-            <div className="bg-slate-950/95 border border-teal-500/30 p-3.5 sm:p-4 rounded-2xl shadow-lg space-y-2">
-              <div className="relative flex items-center justify-between px-2">
-                <div className="flex flex-col items-center gap-0.5 z-10">
-                  <div className="w-3 h-3 rounded-full bg-sky-400 border-2 border-white" />
-                  <span className="text-[9px] font-mono font-bold text-slate-300">Origin</span>
-                </div>
-                <div className="flex-1 h-1 mx-3 bg-slate-800 rounded-full relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-sky-500 via-teal-400 to-amber-400" />
-                </div>
-                <div className="flex flex-col items-center gap-0.5 z-10">
-                  <div className="w-4 h-4 rounded-full bg-amber-400 border border-white flex items-center justify-center text-[9px] text-slate-950 font-black">
-                    ⚡
+                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Your vehicle. Connected.
+                </h2>
+                {/* Live Telemetry HUD Cards */}
+                <div className="flex items-center justify-center gap-2.5 sm:gap-4 flex-wrap pt-1">
+                  <div className="bg-slate-950/95 border border-sky-500/30 px-3.5 sm:px-4 py-2.5 rounded-2xl shadow-md flex items-center gap-3 min-w-[130px]">
+                    <div className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                      <Battery className="w-4 h-4" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-[9px] font-mono text-slate-400 font-bold uppercase">Battery SOC</div>
+                      <div className="text-xs sm:text-sm font-extrabold text-white font-mono">{batterySOC}% • 98% SOH</div>
+                    </div>
                   </div>
-                  <span className="text-[9px] font-mono font-bold text-amber-300">150kW Stop</span>
-                </div>
-                <div className="flex-1 h-1 mx-3 bg-slate-800 rounded-full relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400 via-teal-400 to-emerald-400" />
-                </div>
-                <div className="flex flex-col items-center gap-0.5 z-10">
-                  <div className="w-3 h-3 rounded-full bg-emerald-400 border-2 border-white" />
-                  <span className="text-[9px] font-mono font-bold text-emerald-300">Destination</span>
-                </div>
-              </div>
-              <p className="text-[11px] text-slate-400 font-medium">
-                Dynamic range calculation, terrain compensation, and verified charging waypoints.
-              </p>
-            </div>
-          </div>
-        </div>
 
-        {/* 04 — NETWORK: Network becomes visible (9.0s - 12.0s | p: 0.270 - 0.355) */}
-        {/* Coexists with Journey from 0.270 to 0.285 */}
-        <div
-          className="absolute top-[13%] sm:top-[16%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto"
-          style={getStageStyle(progress, 0.270, 0.355, 0.025, 0.025)}
-        >
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-sky-500/40 text-xs font-mono font-bold text-sky-400 shadow-md">
-              <MapPin className="w-3.5 h-3.5" />
-              <span>VOLTMAP • 1,766 VERIFIED STATIONS</span>
-            </div>
-            <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Your network. Visible.
-            </h2>
-            {/* Verified Network Charging Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-2xl mx-auto pt-0.5">
-              <div className="bg-slate-950/95 border border-emerald-500/30 p-2.5 rounded-xl shadow-md text-left space-y-0.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-mono font-bold text-emerald-400 uppercase">Tata Power Hub</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                </div>
-                <div className="text-xs font-bold text-white">150 kW DC Fast</div>
-                <div className="text-[9px] text-slate-400">Available • CCS2</div>
-              </div>
+                  <div className="bg-slate-950/95 border border-teal-500/30 px-3.5 sm:px-4 py-2.5 rounded-2xl shadow-md flex items-center gap-3 min-w-[130px]">
+                    <div className="w-8 h-8 rounded-xl bg-teal-500/15 border border-teal-500/30 flex items-center justify-center text-teal-400">
+                      <Navigation className="w-4 h-4" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-[9px] font-mono text-slate-400 font-bold uppercase">Est. Range</div>
+                      <div className="text-xs sm:text-sm font-extrabold text-white font-mono">{rangeKm} km</div>
+                    </div>
+                  </div>
 
-              <div className="bg-slate-950/95 border border-sky-500/30 p-2.5 rounded-xl shadow-md text-left space-y-0.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-mono font-bold text-sky-400 uppercase">Jio-bp Pulse Hub</span>
-                  <span className="w-2 h-2 rounded-full bg-sky-400" />
-                </div>
-                <div className="text-xs font-bold text-white">60 kW DC Rapid</div>
-                <div className="text-[9px] text-slate-400">Verified Active</div>
-              </div>
-
-              <div className="bg-slate-950/95 border border-teal-500/30 p-2.5 rounded-xl shadow-md text-left space-y-0.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-mono font-bold text-teal-400 uppercase">Relux Hyper Hub</span>
-                  <span className="w-2 h-2 rounded-full bg-teal-400" />
-                </div>
-                <div className="text-xs font-bold text-white">120 kW Highway DC</div>
-                <div className="text-[9px] text-slate-400">24/7 Verified</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ⚡ 05 — CHARGING: THE HERO WOW MOMENT (11.5s - 23.5s | p: 0.345 - 0.700) */}
-        {/* Slower, deliberate pacing: Approach -> Slow Down -> Stop -> Connect -> 80% -> 100% -> Hold -> Depart */}
-        <div
-          className="absolute top-[12%] sm:top-[14%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-xl mx-auto"
-          style={getStageStyle(progress, 0.345, 0.700, 0.025, 0.025)}
-        >
-          <div className="space-y-3">
-            {/* Status Pill Badge */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-extrabold uppercase tracking-wider shadow-md">
-              <Zap className="w-3.5 h-3.5 fill-current animate-pulse" />
-              <span>
-                {isChargeComplete
-                  ? 'CHARGE COMPLETE • 100% SOH'
-                  : isChargingActive
-                  ? '⚡ ULTRA-FAST DC CHARGING ACTIVE'
-                  : isChargingConnected
-                  ? 'CHARGER CONNECTED • 150 kW DC'
-                  : isCarStopped
-                  ? 'ALIGNED IN CHARGING BAY 02'
-                  : 'APPROACHING CHARGING BAY'}
-              </span>
-            </div>
-
-            <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-              {isChargeComplete
-                ? 'Fully charged. Ready for the road.'
-                : isChargingActive
-                ? 'Your charge. Accelerated.'
-                : isChargingConnected
-                ? 'Your charge. Connected.'
-                : 'Your charge. Approaching.'}
-            </h2>
-
-            {/* Hero Interactive Charging Meter Card */}
-            <div className="bg-slate-950/95 border border-emerald-500/40 p-4 sm:p-5 rounded-2xl shadow-2xl space-y-3.5">
-              
-              {/* Top Readout: Bay Info & Prominent Live SOC */}
-              <div className="flex items-center justify-between">
-                <div className="text-left">
-                  <div className="text-[10px] font-mono text-slate-400 uppercase font-bold">Station Bay</div>
-                  <div className="text-xs sm:text-sm font-bold text-white">Ultra-Fast DC Hub • Bay 02</div>
-                </div>
-
-                <div className="text-right">
-                  <div className="text-[10px] font-mono text-slate-400 uppercase font-bold">State of Charge</div>
-                  <div className="text-xl sm:text-2xl font-extrabold font-mono text-emerald-400 flex items-center gap-1">
-                    <span>{liveSOC}%</span>
-                    <span className="text-xs text-slate-400 font-normal">SOC</span>
+                  <div className="bg-slate-950/95 border border-emerald-500/30 px-3.5 sm:px-4 py-2.5 rounded-2xl shadow-md flex items-center gap-3 min-w-[130px]">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                      <Zap className="w-4 h-4" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-[9px] font-mono text-slate-400 font-bold uppercase">Max Fast Charge</div>
+                      <div className="text-xs sm:text-sm font-extrabold text-white font-mono">{maxDCPower} kW • {connectorType}</div>
+                    </div>
                   </div>
                 </div>
               </div>
+            )}
 
-              {/* Animated Progress Bar */}
-              <div className="w-full bg-slate-900 h-3 rounded-full overflow-hidden p-0.5 border border-slate-700 relative">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-teal-500 via-emerald-400 to-emerald-300 transition-all duration-200"
-                  style={{ width: `${liveSOC}%` }}
-                />
+            {/* 03 — JOURNEY (4.5s – 7.0s) */}
+            {activeStage === 'JOURNEY' && (
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-teal-500/40 text-xs font-mono font-bold text-teal-300 shadow-md">
+                  <Route className="w-3.5 h-3.5" />
+                  <span>VOLTTRIP ROUTE ENGINE</span>
+                </div>
+                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Your journey. Intelligent.
+                </h2>
+                {/* Dynamic Route Corridor */}
+                <div className="bg-slate-950/95 border border-teal-500/30 p-3.5 sm:p-4 rounded-2xl shadow-lg space-y-2">
+                  <div className="relative flex items-center justify-between px-2">
+                    <div className="flex flex-col items-center gap-0.5 z-10">
+                      <div className="w-3 h-3 rounded-full bg-sky-400 border-2 border-white" />
+                      <span className="text-[9px] font-mono font-bold text-slate-300">Origin</span>
+                    </div>
+                    <div className="flex-1 h-1 mx-3 bg-slate-800 rounded-full relative overflow-hidden">
+                      <div className="absolute inset-0 bg-gradient-to-r from-sky-500 via-teal-400 to-amber-400" />
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5 z-10">
+                      <div className="w-4 h-4 rounded-full bg-amber-400 border border-white flex items-center justify-center text-[9px] text-slate-950 font-black">
+                        ⚡
+                      </div>
+                      <span className="text-[9px] font-mono font-bold text-amber-300">150kW Stop</span>
+                    </div>
+                    <div className="flex-1 h-1 mx-3 bg-slate-800 rounded-full relative overflow-hidden">
+                      <div className="absolute inset-0 bg-gradient-to-r from-amber-400 via-teal-400 to-emerald-400" />
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5 z-10">
+                      <div className="w-3 h-3 rounded-full bg-emerald-400 border-2 border-white" />
+                      <span className="text-[9px] font-mono font-bold text-emerald-300">Destination</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    Dynamic range calculation, terrain compensation, and verified charging waypoints.
+                  </p>
+                </div>
               </div>
+            )}
 
-              {/* Explicit 80% -> 84% -> 88% -> 92% -> 96% -> 100% Stepped Progress Indicators */}
-              <div className="grid grid-cols-6 gap-1 pt-0.5">
-                {[80, 84, 88, 92, 96, 100].map((stepSOC) => {
-                  const isReached = liveSOC >= stepSOC;
-                  const isCurrent = liveSOC === stepSOC || (liveSOC > stepSOC && liveSOC < stepSOC + 4);
-                  return (
+            {/* 04 — NETWORK (7.0s – 9.0s) */}
+            {activeStage === 'NETWORK' && (
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-sky-500/40 text-xs font-mono font-bold text-sky-400 shadow-md">
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>VOLTMAP • 1,766 VERIFIED STATIONS</span>
+                </div>
+                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Your network. Visible.
+                </h2>
+                {/* Verified Network Charging Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-2xl mx-auto pt-0.5">
+                  <div className="bg-slate-950/95 border border-emerald-500/30 p-2.5 rounded-xl shadow-md text-left space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-mono font-bold text-emerald-400 uppercase">Tata Power Hub</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white">150 kW DC Fast</div>
+                    <div className="text-[9px] text-slate-400">Available • CCS2</div>
+                  </div>
+
+                  <div className="bg-slate-950/95 border border-sky-500/30 p-2.5 rounded-xl shadow-md text-left space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-mono font-bold text-sky-400 uppercase">Jio-bp Pulse Hub</span>
+                      <span className="w-2 h-2 rounded-full bg-sky-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white">60 kW DC Rapid</div>
+                    <div className="text-[9px] text-slate-400">Verified Active</div>
+                  </div>
+
+                  <div className="bg-slate-950/95 border border-teal-500/30 p-2.5 rounded-xl shadow-md text-left space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-mono font-bold text-teal-400 uppercase">Relux Hyper Hub</span>
+                      <span className="w-2 h-2 rounded-full bg-teal-400" />
+                    </div>
+                    <div className="text-xs font-bold text-white">120 kW Highway DC</div>
+                    <div className="text-[9px] text-slate-400">24/7 Verified</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ⚡ 05 — CHARGING WOW MOMENT (9.0s – 16.7s, ~7.5s) */}
+            {activeStage === 'CHARGING' && (
+              <div className="space-y-3">
+                {/* Status Pill Badge */}
+                <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-extrabold uppercase tracking-wider shadow-md">
+                  <Zap className="w-3.5 h-3.5 fill-current animate-pulse" />
+                  <span>
+                    {chargingPhase === 'READY'
+                      ? 'READY TO DEPART • 100% SOH'
+                      : chargingPhase === 'HOLD_100'
+                      ? 'CHARGE COMPLETE • 100% SOH'
+                      : isChargingActive
+                      ? '⚡ ULTRA-FAST DC CHARGING ACTIVE'
+                      : chargingPhase === 'CONNECT'
+                      ? 'CHARGER CONNECTED • 150 kW DC'
+                      : chargingPhase === 'STOP'
+                      ? 'ALIGNED IN CHARGING BAY 02'
+                      : 'APPROACHING CHARGING BAY'}
+                  </span>
+                </div>
+
+                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  {chargingPhase === 'READY'
+                    ? 'READY TO DEPART'
+                    : isChargeComplete
+                    ? 'Fully charged. Ready for the road.'
+                    : isChargingActive
+                    ? 'Your charge. Accelerated.'
+                    : chargingPhase === 'CONNECT'
+                    ? 'Your charge. Connected.'
+                    : 'Your charge. Approaching.'}
+                </h2>
+
+                {/* Hero Interactive Charging Meter Card */}
+                <div className="bg-slate-950/95 border border-emerald-500/40 p-4 sm:p-5 rounded-2xl shadow-2xl space-y-3.5">
+                  {/* Top Readout: Bay Info & Prominent Live SOC */}
+                  <div className="flex items-center justify-between">
+                    <div className="text-left">
+                      <div className="text-[10px] font-mono text-slate-400 uppercase font-bold">Station Bay</div>
+                      <div className="text-xs sm:text-sm font-bold text-white">Ultra-Fast DC Hub • Bay 02</div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-[10px] font-mono text-slate-400 uppercase font-bold">State of Charge</div>
+                      <div className="text-xl sm:text-2xl font-extrabold font-mono text-emerald-400 flex items-center gap-1">
+                        <span>{liveSOC}%</span>
+                        <span className="text-xs text-slate-400 font-normal">SOC</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Animated Progress Bar */}
+                  <div className="w-full bg-slate-900 h-3 rounded-full overflow-hidden p-0.5 border border-slate-700 relative">
                     <div
-                      key={stepSOC}
-                      className={`py-1 rounded-lg border text-center font-mono text-[10px] font-bold transition-colors ${
-                        isReached
-                          ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
-                          : 'bg-slate-900/60 border-slate-800 text-slate-500'
-                      } ${isCurrent ? 'ring-1 ring-emerald-400' : ''}`}
-                    >
-                      {stepSOC}%
+                      className="h-full rounded-full bg-gradient-to-r from-teal-500 via-emerald-400 to-emerald-300 transition-all duration-200"
+                      style={{ width: `${liveSOC}%` }}
+                    />
+                  </div>
+
+                  {/* Explicit 80% -> 84% -> 88% -> 92% -> 96% -> 100% Stepped Progress Indicators */}
+                  <div className="grid grid-cols-6 gap-1 pt-0.5">
+                    {[80, 84, 88, 92, 96, 100].map((stepSOC) => {
+                      const isReached = liveSOC >= stepSOC;
+                      const isCurrent = liveSOC === stepSOC || (liveSOC > stepSOC && liveSOC < stepSOC + 4);
+                      return (
+                        <div
+                          key={stepSOC}
+                          className={`py-1 rounded-lg border text-center font-mono text-[10px] font-bold transition-colors ${
+                            isReached
+                              ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                              : 'bg-slate-900/60 border-slate-800 text-slate-500'
+                          } ${isCurrent ? 'ring-1 ring-emerald-400' : ''}`}
+                        >
+                          {stepSOC}%
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Charging Telemetry Details */}
+                  <div className="border-t border-slate-800/80 pt-2.5 flex items-center justify-between text-left text-[11px] font-mono">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                      <span className="text-slate-300">
+                        {chargingPhase === 'READY'
+                          ? 'READY'
+                          : isChargeComplete
+                          ? 'Ready to Depart'
+                          : isChargingActive
+                          ? '150 kW DC Ultra Fast'
+                          : 'Connecting Protocol'}
+                      </span>
+                    </div>
+
+                    <div className="text-right text-emerald-400 font-bold">
+                      {isChargeComplete ? '425 km Full Range Restored' : '+18 km / min'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 06 — VOICE AI (16.7s – 18.7s) */}
+            {activeStage === 'VOICE_AI' && (
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-mono font-bold uppercase tracking-wider shadow-md">
+                  <Mic className="w-3.5 h-3.5 text-purple-400" />
+                  <span>VOLT VOICE AI • 62 INTENTS</span>
+                </div>
+                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Your assistant. Always ready.
+                </h2>
+                {/* Seamless Voice AI Utterance Dialog */}
+                <div className="bg-slate-950/95 border border-purple-500/30 p-4 rounded-2xl shadow-xl space-y-3">
+                  <div className="flex items-center justify-between gap-3 text-left">
+                    <div className="flex items-center gap-2.5 max-w-[48%]">
+                      <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
+                        <Mic className="w-4 h-4 text-sky-400" />
+                      </div>
+                      <div className="text-xs text-slate-300 italic">"Find the best charging stop on my route."</div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 max-w-[50%] justify-end text-right">
+                      <div className="text-xs text-emerald-300 font-semibold">"Charging stop optimized. 150 kW DC routed."</div>
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                        <Sparkles className="w-4 h-4 text-emerald-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 07 — PARTNERS (18.7s – 20.3s) */}
+            {activeStage === 'PARTNERS' && (
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 shadow-md">
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>CPO PARTNER ECOSYSTEM</span>
+                </div>
+                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Partners power the network.
+                </h2>
+                <div className="bg-slate-950/95 border border-emerald-500/30 p-4 rounded-2xl shadow-lg space-y-2 max-w-md mx-auto text-left">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-emerald-400" /> Partner CPO Command
+                    </span>
+                    <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                      LIVE SYNC
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Verified Hubs</div>
+                      <div className="text-xs font-extrabold text-emerald-400 font-mono">8 Live</div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Total Power</div>
+                      <div className="text-xs font-extrabold text-sky-400 font-mono">1,420 kW</div>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-400 text-center">CPOs register stations, set tariffs, and monitor telemetry.</div>
+                </div>
+              </div>
+            )}
+
+            {/* 08 — OPERATIONS (20.3s – 21.9s) */}
+            {activeStage === 'OPERATIONS' && (
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-sky-500/40 text-xs font-mono font-bold text-sky-400 shadow-md">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>ADMIN COMMAND CENTER</span>
+                </div>
+                <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Operations keep it moving.
+                </h2>
+                <div className="bg-slate-950/95 border border-sky-500/30 p-4 rounded-2xl shadow-lg space-y-2 max-w-md mx-auto text-left">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-sky-400" /> Central Operations
+                    </span>
+                    <span className="text-[9px] font-mono font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-md">
+                      GOVERNANCE
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Stations</div>
+                      <div className="text-xs font-extrabold text-sky-400 font-mono">1,766 Active</div>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                      <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Uptime</div>
+                      <div className="text-xs font-extrabold text-teal-400 font-mono">99.9% Health</div>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-400 text-center">Central operations, verification, and network audit logs.</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* 6. FINAL CLIMAX ECOSYSTEM REVEAL (21.9s – 24.0s+) */}
+        {/* ================================================================= */}
+        {activeStage === 'FINAL' && (
+          <div
+            className="absolute inset-0 z-40 flex flex-col items-center justify-center p-4 sm:p-6 text-center bg-slate-950/90 will-change-transform overflow-y-auto"
+            style={{
+              opacity: cardOpacity,
+              transform: `translate3d(0, ${cardTranslateY.toFixed(1)}px, 0)`,
+              transition: 'opacity 0.25s ease-out, transform 0.25s ease-out',
+            }}
+          >
+            <div className="max-w-xl w-full space-y-3.5 bg-slate-900/95 border border-emerald-500/40 p-5 sm:p-6 rounded-3xl shadow-2xl my-auto">
+              
+              {/* Luminous Convergence Badge */}
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] sm:text-[11px] font-mono font-extrabold uppercase tracking-widest">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>EVERYTHING CONNECTED</span>
+              </div>
+
+              <div className="space-y-0.5">
+                <h2 className="font-heading text-xl sm:text-3xl font-extrabold text-white tracking-tight">
+                  One ecosystem. Built for electric mobility.
+                </h2>
+                <p className="text-[10px] sm:text-xs text-slate-300 font-medium">
+                  Vehicle • Driver • Voice AI • VoltTrip • VoltMap • Charging Network • Partners • Operations
+                </p>
+              </div>
+
+              {/* 8-Node Converging Matrix */}
+              <div className="grid grid-cols-4 gap-1.5 pt-1">
+                {[
+                  { label: 'Vehicle', icon: Car, color: 'text-sky-400', border: 'border-sky-500/30' },
+                  { label: 'Driver', icon: User, color: 'text-teal-400', border: 'border-teal-500/30' },
+                  { label: 'Voice AI', icon: Mic, color: 'text-purple-400', border: 'border-purple-500/30' },
+                  { label: 'VoltTrip', icon: Route, color: 'text-emerald-400', border: 'border-emerald-500/30' },
+                  { label: 'VoltMap', icon: MapPin, color: 'text-sky-400', border: 'border-sky-500/30' },
+                  { label: 'Network', icon: Zap, color: 'text-amber-400', border: 'border-amber-500/30' },
+                  { label: 'Partners', icon: Building2, color: 'text-emerald-400', border: 'border-emerald-500/30' },
+                  { label: 'Operations', icon: ShieldCheck, color: 'text-cyan-400', border: 'border-cyan-500/30' },
+                ].map((node, i) => {
+                  const Icon = node.icon;
+                  return (
+                    <div key={i} className={`p-2 rounded-2xl bg-slate-950/80 border ${node.border} text-center space-y-0.5 shadow-sm hover:scale-105 transition-transform`}>
+                      <Icon className={`w-3.5 h-3.5 mx-auto ${node.color}`} />
+                      <div className="text-[9px] font-mono font-bold text-slate-300 truncate">{node.label}</div>
                     </div>
                   );
                 })}
               </div>
 
-              {/* Charging Telemetry Details */}
-              <div className="border-t border-slate-800/80 pt-2.5 flex items-center justify-between text-left text-[11px] font-mono">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span className="text-slate-300">
-                    {isChargeComplete ? 'Ready to Depart' : isChargingActive ? '150 kW DC Ultra Fast' : 'Connecting Protocol'}
-                  </span>
-                </div>
+              {/* Official Brand Identity Lockup */}
+              <div className="pt-1 flex flex-col items-center gap-1">
+                <VoltConnectLogo variant="navbar" />
+                <span className="text-[10px] font-mono font-bold tracking-widest text-slate-400 uppercase">
+                  The EV ecosystem, connected.
+                </span>
+              </div>
 
-                <div className="text-right text-emerald-400 font-bold">
-                  {isChargeComplete ? '425 km Full Range' : '+18 km / min'}
-                </div>
+              {/* Action Buttons */}
+              <div className="pt-1 flex flex-col sm:flex-row items-center gap-2">
+                <button
+                  onClick={onEnterApp}
+                  className="w-full sm:flex-1 py-3 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-heading font-extrabold text-xs sm:text-sm tracking-wide shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <span>ENTER VOLTCONNECT</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={onStartJourney}
+                  className="w-full sm:w-auto py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-body font-bold text-xs border border-slate-700 hover:border-slate-600 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <span>Plan Trip</span>
+                </button>
               </div>
 
             </div>
           </div>
-        </div>
-
-        {/* 06 — VOICE AI: Vehicle resumes (23.5s - 26.5s | p: 0.695 - 0.780) */}
-        <div
-          className="absolute top-[13%] sm:top-[16%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-xl mx-auto"
-          style={getStageStyle(progress, 0.695, 0.780, 0.025, 0.025)}
-        >
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-mono font-bold uppercase tracking-wider shadow-md">
-              <Mic className="w-3.5 h-3.5 text-purple-400" />
-              <span>VOLT VOICE AI • 62 INTENTS</span>
-            </div>
-            <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Your assistant. Always ready.
-            </h2>
-            {/* Seamless Voice AI Utterance Dialog */}
-            <div className="bg-slate-950/95 border border-purple-500/30 p-4 rounded-2xl shadow-xl space-y-3">
-              <div className="flex items-center justify-between gap-3 text-left">
-                <div className="flex items-center gap-2.5 max-w-[48%]">
-                  <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
-                    <Mic className="w-4 h-4 text-sky-400" />
-                  </div>
-                  <div className="text-xs text-slate-300 italic">"Find the best charging stop on my route."</div>
-                </div>
-
-                <div className="flex items-center gap-2.5 max-w-[50%] justify-end text-right">
-                  <div className="text-xs text-emerald-300 font-semibold">"Charging stop optimized. 150 kW DC routed."</div>
-                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
-                    <Sparkles className="w-4 h-4 text-emerald-400" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 07 & 08 — PARTNERS + OPERATIONS: Coexisting Dual Pillars (26.0s - 30.5s | p: 0.770 - 0.910) */}
-        <div
-          className="absolute top-[13%] sm:top-[16%] inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 text-center will-change-transform max-w-2xl mx-auto"
-          style={getStageStyle(progress, 0.770, 0.910, 0.025, 0.025)}
-        >
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-emerald-500/40 text-xs font-mono font-bold text-emerald-400 shadow-md">
-              <Building2 className="w-3.5 h-3.5" />
-              <span>PARTNERS + OPERATIONS = RELIABLE ECOSYSTEM</span>
-            </div>
-            <h2 className="font-heading text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Partners power it. Operations keep it moving.
-            </h2>
-            {/* Lightweight Floating Dual Cards (Partner + Admin Operations) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-              {/* CPO Partner Card */}
-              <div className="bg-slate-950/95 border border-emerald-500/30 p-3.5 rounded-2xl shadow-lg space-y-2">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-emerald-400" /> Partner CPO Command
-                  </span>
-                  <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                    LIVE SYNC
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div className="p-1.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Verified Hubs</div>
-                    <div className="text-xs font-extrabold text-emerald-400 font-mono">8 Live</div>
-                  </div>
-                  <div className="p-1.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Total Power</div>
-                    <div className="text-xs font-extrabold text-sky-400 font-mono">1,420 kW</div>
-                  </div>
-                </div>
-                <div className="text-[10px] text-slate-400">CPOs register stations, set tariffs, and verify telemetry.</div>
-              </div>
-
-              {/* Admin Operations Card */}
-              <div className="bg-slate-950/95 border border-sky-500/30 p-3.5 rounded-2xl shadow-lg space-y-2">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-sky-400" /> Admin Command Center
-                  </span>
-                  <span className="text-[9px] font-mono font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-md">
-                    GOVERNANCE
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div className="p-1.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Stations</div>
-                    <div className="text-xs font-extrabold text-sky-400 font-mono">1,766 Active</div>
-                  </div>
-                  <div className="p-1.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <div className="text-[8px] font-mono text-slate-400 font-bold uppercase">Uptime</div>
-                    <div className="text-xs font-extrabold text-teal-400 font-mono">99.9% Health</div>
-                  </div>
-                </div>
-                <div className="text-[10px] text-slate-400">Central operations, verification, and audit logs.</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 09 — FINAL ECOSYSTEM CONVERGENCE (30.0s - 33.0s+ | p: 0.895 - 1.000) */}
-        <div
-          className="absolute inset-0 z-40 flex flex-col items-center justify-center p-4 sm:p-6 text-center bg-slate-950/90 will-change-transform overflow-y-auto"
-          style={getStageStyle(progress, 0.895, 1.0, 0.025, 0.000)}
-        >
-          <div className="max-w-xl w-full space-y-3.5 bg-slate-900/95 border border-emerald-500/40 p-5 sm:p-6 rounded-3xl shadow-2xl my-auto">
-            
-            {/* Luminous Convergence Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] sm:text-[11px] font-mono font-extrabold uppercase tracking-widest">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>EVERYTHING CONNECTED</span>
-            </div>
-
-            <div className="space-y-0.5">
-              <h2 className="font-heading text-xl sm:text-3xl font-extrabold text-white tracking-tight">
-                One ecosystem. Built for electric mobility.
-              </h2>
-              <p className="text-[10px] sm:text-xs text-slate-300 font-medium">
-                Vehicle • Driver • Voice AI • VoltTrip • VoltMap • Charging Network • Partners • Operations
-              </p>
-            </div>
-
-            {/* 8-Node Converging Matrix */}
-            <div className="grid grid-cols-4 gap-1.5 pt-1">
-              {[
-                { label: 'Vehicle', icon: Car, color: 'text-sky-400', border: 'border-sky-500/30' },
-                { label: 'Driver', icon: User, color: 'text-teal-400', border: 'border-teal-500/30' },
-                { label: 'Voice AI', icon: Mic, color: 'text-purple-400', border: 'border-purple-500/30' },
-                { label: 'VoltTrip', icon: Route, color: 'text-emerald-400', border: 'border-emerald-500/30' },
-                { label: 'VoltMap', icon: MapPin, color: 'text-sky-400', border: 'border-sky-500/30' },
-                { label: 'Network', icon: Zap, color: 'text-amber-400', border: 'border-amber-500/30' },
-                { label: 'Partners', icon: Building2, color: 'text-emerald-400', border: 'border-emerald-500/30' },
-                { label: 'Operations', icon: ShieldCheck, color: 'text-cyan-400', border: 'border-cyan-500/30' },
-              ].map((node, i) => {
-                const Icon = node.icon;
-                return (
-                  <div key={i} className={`p-2 rounded-2xl bg-slate-950/80 border ${node.border} text-center space-y-0.5 shadow-sm hover:scale-105 transition-transform`}>
-                    <Icon className={`w-3.5 h-3.5 mx-auto ${node.color}`} />
-                    <div className="text-[9px] font-mono font-bold text-slate-300 truncate">{node.label}</div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Official Brand Identity Lockup */}
-            <div className="pt-1 flex flex-col items-center gap-1">
-              <VoltConnectLogo variant="navbar" />
-              <span className="text-[10px] font-mono font-bold tracking-widest text-slate-400 uppercase">
-                The EV ecosystem, connected.
-              </span>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="pt-1 flex flex-col sm:flex-row items-center gap-2">
-              <button
-                onClick={onEnterApp}
-                className="w-full sm:flex-1 py-3 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-heading font-extrabold text-xs sm:text-sm tracking-wide shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-              >
-                <span>ENTER VOLTCONNECT</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={onStartJourney}
-                className="w-full sm:w-auto py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-body font-bold text-xs border border-slate-700 hover:border-slate-600 transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-              >
-                <span>Plan Trip</span>
-              </button>
-            </div>
-
-          </div>
-        </div>
+        )}
 
       </div>
 
