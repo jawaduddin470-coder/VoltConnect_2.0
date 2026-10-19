@@ -10,6 +10,7 @@ interface LogoFullProps {
 export const LogoFull: React.FC<LogoFullProps> = ({
   className = '',
   height,
+  lightBg,
 }) => {
-  return <VoltConnectLogo variant="default" className={className} size={height} />;
+  return <VoltConnectLogo variant="default" className={className} size={height} lightBg={lightBg} />;
 };

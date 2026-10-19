@@ -33,14 +33,17 @@ import { TechnicianDashboard } from '@/pages/technician/TechnicianDashboard';
 import { AdminDashboard } from '@/pages/admin/AdminDashboard';
 import { UserRole } from '@/types';
 
+import { VoltConnectLogo } from '@/components/common/VoltConnectLogo';
+
 // Full-Screen High-Visibility Loading Gate
 const PortalLoadingScreen: React.FC<{ title?: string; subtitle?: string }> = ({
   title = 'VOLTCONNECT 2.0',
   subtitle = 'Authenticating session...',
 }) => (
   <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-sans">
-    <div className="space-y-4 text-center">
-      <div className="w-12 h-12 rounded-full border-4 border-sky-500 border-t-transparent animate-spin mx-auto" />
+    <div className="space-y-3 text-center flex flex-col items-center">
+      <VoltConnectLogo variant="loading" size={48} />
+      <div className="w-8 h-8 rounded-full border-2 border-sky-500 border-t-transparent animate-spin mx-auto mt-1" />
       <div className="font-heading font-extrabold text-lg text-white">{title}</div>
       <p className="text-xs text-slate-400 font-mono">{subtitle}</p>
     </div>
