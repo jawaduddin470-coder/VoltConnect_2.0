@@ -2,21 +2,22 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AdminShell } from '@/components/admin/AdminShell';
-import { AdminOverviewView } from '@/components/admin/AdminOverviewView';
-import { AdminStationsView } from '@/components/admin/AdminStationsView';
-import { AdminVehiclesView } from '@/components/admin/AdminVehiclesView';
-import { AdminUsersView } from '@/components/admin/AdminUsersView';
-import { AdminPartnersView } from '@/components/admin/AdminPartnersView';
-import { AdminOperationsView } from '@/components/admin/AdminOperationsView';
-import { AdminAuditLogsView } from '@/components/admin/AdminAuditLogsView';
-import { AdminServiceView } from '@/components/admin/AdminServiceView';
-import { AdminAnalyticsView } from '@/components/admin/AdminAnalyticsView';
-import { AdminSystemHealthView } from '@/components/admin/AdminSystemHealthView';
-import { AdminSettingsView } from '@/components/admin/AdminSettingsView';
 import { operationsService } from '@/services/operationsService';
 import { chargingDataService } from '@/services/chargingDataService';
 import { AuditLog, ChargingStation, PartnerApplication, DataQualityIssue, StationReport, UserRole } from '@/types';
-import L from 'leaflet';
+
+// Code-split admin subviews for instant initial dashboard rendering
+const AdminOverviewView = React.lazy(() => import('@/components/admin/AdminOverviewView').then(m => ({ default: m.AdminOverviewView })));
+const AdminStationsView = React.lazy(() => import('@/components/admin/AdminStationsView').then(m => ({ default: m.AdminStationsView })));
+const AdminVehiclesView = React.lazy(() => import('@/components/admin/AdminVehiclesView').then(m => ({ default: m.AdminVehiclesView })));
+const AdminUsersView = React.lazy(() => import('@/components/admin/AdminUsersView').then(m => ({ default: m.AdminUsersView })));
+const AdminPartnersView = React.lazy(() => import('@/components/admin/AdminPartnersView').then(m => ({ default: m.AdminPartnersView })));
+const AdminOperationsView = React.lazy(() => import('@/components/admin/AdminOperationsView').then(m => ({ default: m.AdminOperationsView })));
+const AdminAuditLogsView = React.lazy(() => import('@/components/admin/AdminAuditLogsView').then(m => ({ default: m.AdminAuditLogsView })));
+const AdminServiceView = React.lazy(() => import('@/components/admin/AdminServiceView').then(m => ({ default: m.AdminServiceView })));
+const AdminAnalyticsView = React.lazy(() => import('@/components/admin/AdminAnalyticsView').then(m => ({ default: m.AdminAnalyticsView })));
+const AdminSystemHealthView = React.lazy(() => import('@/components/admin/AdminSystemHealthView').then(m => ({ default: m.AdminSystemHealthView })));
+const AdminSettingsView = React.lazy(() => import('@/components/admin/AdminSettingsView').then(m => ({ default: m.AdminSettingsView })));
 import {
   ShieldCheck,
   Users,
@@ -199,7 +200,16 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         {/* 2. MAIN SUBROUTE VIEW */}
-        {renderCurrentView()}
+        <React.Suspense
+          fallback={
+            <div className="p-12 flex flex-col items-center justify-center space-y-3">
+              <div className="w-8 h-8 rounded-full border-2 border-sky-500 border-t-transparent animate-spin" />
+              <span className="text-xs text-slate-400 font-mono">Loading operational module...</span>
+            </div>
+          }
+        >
+          {renderCurrentView()}
+        </React.Suspense>
 
         {/* Edit Role Modal */}
         {editingUser && (

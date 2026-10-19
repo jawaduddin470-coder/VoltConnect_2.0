@@ -14,26 +14,35 @@ import { AdminLogin } from '@/pages/auth/AdminLogin';
 import { PartnerLogin } from '@/pages/auth/PartnerLogin';
 import { TechnicianLogin } from '@/pages/auth/TechnicianLogin';
 import { Signup } from '@/pages/auth/Signup';
-import { Onboarding } from '@/pages/onboarding/Onboarding';
-import { DriverDashboard } from '@/pages/driver/Dashboard';
-import { ExplorePage } from '@/pages/driver/Explore';
-import { SmartTripPlanner } from '@/pages/driver/Trips';
-import { GaragePage } from '@/pages/driver/Garage';
-import { VoltHealthPage } from '@/pages/driver/VoltHealthPage';
-import { VoltCarePage } from '@/pages/driver/VoltCarePage';
-import { HomeChargePage } from '@/pages/driver/HomeChargePage';
-import { VoltSOSPage } from '@/pages/driver/VoltSOSPage';
-import { VoltAIPage } from '@/pages/driver/VoltAIPage';
-import { VoltInsightPage } from '@/pages/driver/VoltInsightPage';
-import { ProfilePage } from '@/pages/driver/ProfilePage';
+// Lazy-Loaded Application Modules
+const Onboarding = React.lazy(() => import('@/pages/onboarding/Onboarding').then(m => ({ default: m.Onboarding })));
+const DriverDashboard = React.lazy(() => import('@/pages/driver/Dashboard').then(m => ({ default: m.DriverDashboard })));
+const ExplorePage = React.lazy(() => import('@/pages/driver/Explore').then(m => ({ default: m.ExplorePage })));
+const SmartTripPlanner = React.lazy(() => import('@/pages/driver/Trips').then(m => ({ default: m.SmartTripPlanner })));
+const GaragePage = React.lazy(() => import('@/pages/driver/Garage').then(m => ({ default: m.GaragePage })));
+const VoltHealthPage = React.lazy(() => import('@/pages/driver/VoltHealthPage').then(m => ({ default: m.VoltHealthPage })));
+const VoltCarePage = React.lazy(() => import('@/pages/driver/VoltCarePage').then(m => ({ default: m.VoltCarePage })));
+const HomeChargePage = React.lazy(() => import('@/pages/driver/HomeChargePage').then(m => ({ default: m.HomeChargePage })));
+const VoltSOSPage = React.lazy(() => import('@/pages/driver/VoltSOSPage').then(m => ({ default: m.VoltSOSPage })));
+const VoltAIPage = React.lazy(() => import('@/pages/driver/VoltAIPage').then(m => ({ default: m.VoltAIPage })));
+const VoltInsightPage = React.lazy(() => import('@/pages/driver/VoltInsightPage').then(m => ({ default: m.VoltInsightPage })));
+const ProfilePage = React.lazy(() => import('@/pages/driver/ProfilePage').then(m => ({ default: m.ProfilePage })));
 
-// Portals
-import { PartnerDashboard } from '@/pages/partner/PartnerDashboard';
-import { TechnicianDashboard } from '@/pages/technician/TechnicianDashboard';
-import { AdminDashboard } from '@/pages/admin/AdminDashboard';
+// Lazy-Loaded Enterprise Portals
+const PartnerDashboard = React.lazy(() => import('@/pages/partner/PartnerDashboard').then(m => ({ default: m.PartnerDashboard })));
+const TechnicianDashboard = React.lazy(() => import('@/pages/technician/TechnicianDashboard').then(m => ({ default: m.TechnicianDashboard })));
+const AdminDashboard = React.lazy(() => import('@/pages/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 import { UserRole } from '@/types';
 
 import { VoltConnectLogo } from '@/components/common/VoltConnectLogo';
+
+const PageLoadingFallback: React.FC = () => (
+  <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 space-y-4">
+    <VoltConnectLogo variant="loading" size={38} />
+    <div className="w-6 h-6 rounded-full border-2 border-sky-500 border-t-transparent animate-spin" />
+    <p className="text-xs font-semibold text-slate-500 font-mono tracking-wider">LOADING MODULE...</p>
+  </div>
+);
 
 // Full-Screen High-Visibility Loading Gate
 const PortalLoadingScreen: React.FC<{ title?: string; subtitle?: string }> = ({
@@ -136,7 +145,9 @@ const DriverPortalBoundary: React.FC<{ children: React.ReactNode; hideFooter?: b
   // E. Render Driver UI inside AppLayout
   return (
     <AppLayout hideFooter={hideFooter}>
-      {children}
+      <React.Suspense fallback={<PageLoadingFallback />}>
+        {children}
+      </React.Suspense>
     </AppLayout>
   );
 };
@@ -159,7 +170,11 @@ const AdminPortalBoundary: React.FC<{ children: React.ReactNode }> = ({ children
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <>{children}</>;
+  return (
+    <React.Suspense fallback={<PortalLoadingScreen title="ADMIN COMMAND CENTER" subtitle="Loading administration console..." />}>
+      {children}
+    </React.Suspense>
+  );
 };
 
 // 3. PARTNER PORTAL BOUNDARY: Strictly isolates Partner workspace
@@ -179,7 +194,11 @@ const PartnerPortalBoundary: React.FC<{ children: React.ReactNode }> = ({ childr
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <>{children}</>;
+  return (
+    <React.Suspense fallback={<PortalLoadingScreen title="PARTNER WORKSPACE" subtitle="Loading partner workspace..." />}>
+      {children}
+    </React.Suspense>
+  );
 };
 
 // 4. TECHNICIAN PORTAL BOUNDARY: Strictly isolates Technician workspace
@@ -199,7 +218,11 @@ const TechnicianPortalBoundary: React.FC<{ children: React.ReactNode }> = ({ chi
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <>{children}</>;
+  return (
+    <React.Suspense fallback={<PortalLoadingScreen title="TECHNICIAN WORKSPACE" subtitle="Loading technician workspace..." />}>
+      {children}
+    </React.Suspense>
+  );
 };
 
 export const App: React.FC = () => {

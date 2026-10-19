@@ -13,4 +13,15 @@ export default defineConfig({
   server: {
     host: 'localhost',
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+          'vendor-icons': ['lucide-react'],
+        },
+      },
+    },
+  },
 });

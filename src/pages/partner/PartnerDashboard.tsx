@@ -9,15 +9,15 @@ import { PartnerHeader } from '@/components/partner/PartnerHeader';
 import { PartnerHero } from '@/components/partner/PartnerHero';
 import { PartnerKPIStats } from '@/components/partner/PartnerKPIStats';
 import { PartnerStationList } from '@/components/partner/PartnerStationList';
-import { PartnerStationDetailView } from '@/components/partner/PartnerStationDetailView';
-import { PartnerAddStationModal } from '@/components/partner/PartnerAddStationModal';
-import { PartnerTelemetryView } from '@/components/partner/PartnerTelemetryView';
-import { PartnerReportsView } from '@/components/partner/PartnerReportsView';
 import { PartnerProfileView } from '@/components/partner/PartnerProfileView';
-import { PartnerNotificationsModal } from '@/components/partner/PartnerNotificationsModal';
-import { PartnerLocationPickerMap } from '@/components/partner/PartnerLocationPickerMap';
-import { PartnerNetworkMap } from '@/components/partner/PartnerNetworkMap';
-// Partner station submissions default to verificationStatus: 'pending' and require admin approval
+
+// Code-split heavy views and modals
+const PartnerNetworkMap = React.lazy(() => import('@/components/partner/PartnerNetworkMap').then(m => ({ default: m.PartnerNetworkMap })));
+const PartnerStationDetailView = React.lazy(() => import('@/components/partner/PartnerStationDetailView').then(m => ({ default: m.PartnerStationDetailView })));
+const PartnerAddStationModal = React.lazy(() => import('@/components/partner/PartnerAddStationModal').then(m => ({ default: m.PartnerAddStationModal })));
+const PartnerTelemetryView = React.lazy(() => import('@/components/partner/PartnerTelemetryView').then(m => ({ default: m.PartnerTelemetryView })));
+const PartnerReportsView = React.lazy(() => import('@/components/partner/PartnerReportsView').then(m => ({ default: m.PartnerReportsView })));
+const PartnerNotificationsModal = React.lazy(() => import('@/components/partner/PartnerNotificationsModal').then(m => ({ default: m.PartnerNotificationsModal })));
 
 import {
   Building2,
@@ -313,43 +313,74 @@ export const PartnerDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* TAB: PRIVATE PARTNER-ONLY NETWORK MAP */}
-        {activeTab === 'map' && !selectedStation && (
-          <div className="space-y-6">
-            <PartnerNetworkMap
-              partnerId={user?.uid || ''}
-              stations={partnerStations}
-              onSelectStation={(st) => setSelectedStation(st)}
-              onEditStation={(st, resubmit) => handleOpenEdit(st, resubmit)}
-              onAddStationClick={() => setShowAddModal(true)}
+        <React.Suspense
+          fallback={
+            <div className="p-12 flex flex-col items-center justify-center space-y-3">
+              <div className="w-8 h-8 rounded-full border-2 border-sky-500 border-t-transparent animate-spin" />
+              <span className="text-xs text-slate-400 font-mono">Loading partner component...</span>
+            </div>
+          }
+        >
+          {/* TAB: PRIVATE PARTNER-ONLY NETWORK MAP */}
+          {activeTab === 'map' && !selectedStation && (
+            <div className="space-y-6">
+              <PartnerNetworkMap
+                partnerId={user?.uid || ''}
+                stations={partnerStations}
+                onSelectStation={(st) => setSelectedStation(st)}
+                onEditStation={(st, resubmit) => handleOpenEdit(st, resubmit)}
+                onAddStationClick={() => setShowAddModal(true)}
+              />
+            </div>
+          )}
+
+          {/* STATION FULL DETAIL VIEW */}
+          {selectedStation && (
+            <PartnerStationDetailView
+              station={selectedStation}
+              onBack={() => setSelectedStation(null)}
+              onEdit={(st, resubmit) => handleOpenEdit(st, resubmit)}
             />
-          </div>
-        )}
+          )}
 
-        {/* STATION FULL DETAIL VIEW */}
-        {selectedStation && (
-          <PartnerStationDetailView
-            station={selectedStation}
-            onBack={() => setSelectedStation(null)}
-            onEdit={(st, resubmit) => handleOpenEdit(st, resubmit)}
-          />
-        )}
+          {/* TAB 3: TELEMETRY & FEEDS */}
+          {activeTab === 'feeds' && (
+            <PartnerTelemetryView stations={partnerStations} />
+          )}
 
-        {/* TAB 3: TELEMETRY & FEEDS */}
-        {activeTab === 'feeds' && (
-          <PartnerTelemetryView stations={partnerStations} />
-        )}
+          {/* TAB 4: COMMUNITY & DRIVER REPORTS */}
+          {activeTab === 'reports' && (
+            <PartnerReportsView
+              reports={partnerReports}
+              stations={partnerStations}
+              onReportUpdated={(updated) => {
+                setPartnerReports(prev => prev.map(r => (r.id === updated.id ? updated : r)));
+              }}
+            />
+          )}
 
-        {/* TAB 4: COMMUNITY & DRIVER REPORTS */}
-        {activeTab === 'reports' && (
-          <PartnerReportsView
-            reports={partnerReports}
-            stations={partnerStations}
-            onReportUpdated={(updated) => {
-              setPartnerReports(prev => prev.map(r => (r.id === updated.id ? updated : r)));
-            }}
-          />
-        )}
+          {/* 5-STEP ADD CHARGING HUB MODAL WIZARD */}
+          {showAddModal && (
+            <PartnerAddStationModal
+              isOpen={showAddModal}
+              onClose={() => setShowAddModal(false)}
+              onStationCreated={(newStation) => {
+                setPartnerStations(prev => [newStation, ...prev.filter(s => s.id !== newStation.id)]);
+                setActiveTab('stations');
+              }}
+            />
+          )}
+
+          {/* NOTIFICATIONS DRAWER / MODAL */}
+          {showNotificationsModal && (
+            <PartnerNotificationsModal
+              isOpen={showNotificationsModal}
+              onClose={() => setShowNotificationsModal(false)}
+              stations={partnerStations}
+              reports={partnerReports}
+            />
+          )}
+        </React.Suspense>
 
         {/* TAB 5: CPO Profile & Settings */}
         {activeTab === 'profile' && (
@@ -360,24 +391,6 @@ export const PartnerDashboard: React.FC = () => {
           />
         )}
       </main>
-
-      {/* 5-STEP ADD CHARGING HUB MODAL WIZARD */}
-      <PartnerAddStationModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onStationCreated={(newStation) => {
-          setPartnerStations(prev => [newStation, ...prev.filter(s => s.id !== newStation.id)]);
-          setActiveTab('stations');
-        }}
-      />
-
-      {/* NOTIFICATIONS DRAWER / MODAL */}
-      <PartnerNotificationsModal
-        isOpen={showNotificationsModal}
-        onClose={() => setShowNotificationsModal(false)}
-        stations={partnerStations}
-        reports={partnerReports}
-      />
 
       {/* EDIT / RESUBMIT METADATA MODAL */}
       {editingStation && (

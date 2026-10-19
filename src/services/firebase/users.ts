@@ -16,10 +16,13 @@ export async function fetchUserProfile(uid: string): Promise<UserProfile | null>
  * Normalizes and validates the role.
  * Returns null if the user is unauthenticated or the role cannot be securely verified.
  */
-export async function resolveAuthoritativeRole(uid: string | null | undefined): Promise<UserRole | null> {
+export async function resolveAuthoritativeRole(
+  uid: string | null | undefined,
+  cachedProfile?: UserProfile | null
+): Promise<UserRole | null> {
   if (!uid) return null;
   try {
-    const profile = await fetchUserProfile(uid);
+    const profile = cachedProfile !== undefined ? cachedProfile : await fetchUserProfile(uid);
     if (!profile) return 'driver'; // brand-new authenticated account defaults to driver
     const normalized = (profile.role || '').toLowerCase().trim();
     if (['driver', 'partner', 'technician', 'admin', 'super_admin'].includes(normalized)) {

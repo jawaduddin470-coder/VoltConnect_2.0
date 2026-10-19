@@ -159,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // Authoritatively resolve role from Firestore profile
-        const roleRes = await resolveAuthoritativeRole(fbUser.uid);
+        const roleRes = await resolveAuthoritativeRole(fbUser.uid, profile);
         const resolvedRole: UserRole = roleRes || (profile.role as UserRole) || 'driver';
 
         const dbVehicles = await fetchUserVehicles(fbUser.uid);
@@ -300,7 +300,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // Authoritatively resolve role from Firestore
-        const roleRes = await resolveAuthoritativeRole(fbUser.uid);
+        const roleRes = await resolveAuthoritativeRole(fbUser.uid, profile);
         const resolvedRole: UserRole = roleRes || (profile.role as UserRole) || 'driver';
 
         // Authoritative role validation if logging into the Driver portal
@@ -349,7 +349,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await saveUserProfile(profile);
       }
 
-      const finalRoleRes = await resolveAuthoritativeRole(fbUser.uid);
+      const finalRoleRes = await resolveAuthoritativeRole(fbUser.uid, profile);
       const finalRole: UserRole = finalRoleRes || (profile.role as UserRole) || 'driver';
 
       setUser(profile);
@@ -398,7 +398,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await saveUserProfile(profile);
       }
 
-      const roleRes = await resolveAuthoritativeRole(fbUser.uid);
+      const roleRes = await resolveAuthoritativeRole(fbUser.uid, profile);
       const finalRole: UserRole = roleRes || (profile.role as UserRole) || 'driver';
 
       setUser(profile);

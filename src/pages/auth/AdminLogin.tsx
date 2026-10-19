@@ -8,8 +8,8 @@ export const AdminLogin: React.FC = () => {
   const { login, role } = useAuth();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('admin2.0@voltconnect.io');
-  const [password, setPassword] = useState('VoltAdmin2026!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState<{
     title: string;
@@ -120,7 +120,9 @@ export const AdminLogin: React.FC = () => {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-slate-900 font-medium text-white text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none"
+              placeholder="Enter admin email"
+              autoComplete="username"
+              className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-slate-900 font-medium text-white text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none placeholder:text-slate-500"
               required
             />
           </div>
@@ -131,7 +133,9 @@ export const AdminLogin: React.FC = () => {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-slate-900 font-medium text-white text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none"
+              placeholder="Enter admin password"
+              autoComplete="current-password"
+              className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-slate-900 font-medium text-white text-xs focus:ring-2 focus:ring-sky-500 focus:outline-none placeholder:text-slate-500"
               required
             />
           </div>

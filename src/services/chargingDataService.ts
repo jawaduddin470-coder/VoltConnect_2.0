@@ -220,6 +220,11 @@ class ChargingDataService {
 
     return () => {
       this.subscribers.delete(callback);
+      if (this.subscribers.size === 0 && this.unsubscribeFirestore) {
+        this.unsubscribeFirestore();
+        this.unsubscribeFirestore = null;
+        this.isListeningToFirestore = false;
+      }
     };
   }
 

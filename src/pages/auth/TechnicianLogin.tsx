@@ -8,8 +8,8 @@ export const TechnicianLogin: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('ramesh@voltcare.in');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState<{
     title: string;
@@ -120,7 +120,9 @@ export const TechnicianLogin: React.FC = () => {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-slate-900 font-medium text-white text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              placeholder="Enter technician email"
+              autoComplete="username"
+              className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-slate-900 font-medium text-white text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none placeholder:text-slate-500"
               required
             />
           </div>
@@ -131,7 +133,9 @@ export const TechnicianLogin: React.FC = () => {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-slate-900 font-medium text-white text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              placeholder="Enter password"
+              autoComplete="current-password"
+              className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-slate-900 font-medium text-white text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none placeholder:text-slate-500"
               required
             />
           </div>

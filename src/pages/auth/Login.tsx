@@ -146,9 +146,10 @@ export const Login: React.FC = () => {
             </label>
             <input
               type="email"
-              placeholder="e.g. driver@voltconnect.io"
+              placeholder="Enter email address"
               value={email}
               onChange={e => setEmail(e.target.value)}
+              autoComplete="username"
               className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-900 text-xs"
               required
             />
@@ -172,9 +173,10 @@ export const Login: React.FC = () => {
             </div>
             <input
               type="password"
-              placeholder="••••••••"
+              placeholder="Enter password"
               value={password}
               onChange={e => setPassword(e.target.value)}
+              autoComplete="current-password"
               className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-900 text-xs"
               required
             />
